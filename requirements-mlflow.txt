@@ -1,0 +1,3 @@
+# MLflow for experiment tracking in COMP47950 Quantum Machine Learning.
+# Install in each framework venv (Qiskit / PennyLane) so both can log to the same ./mlruns.
+mlflow>=2.17.0,<3
