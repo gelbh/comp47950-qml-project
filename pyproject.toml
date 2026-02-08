@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qml-project"
+version = "0.1.0"
+description = "COMP47950 Quantum Machine Learning: classical, simulated QML, and real-device pipelines."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scikit-learn",
+    "pandas",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+mlflow = [
+    "mlflow>=2.17.0,<3",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
