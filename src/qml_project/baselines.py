@@ -1,0 +1,94 @@
+"""
+Classical ML baselines for COMP47950 QML project.
+
+Logistic Regression, Random Forest, and SVM. Returns accuracy, F1 (macro),
+precision (macro), recall (macro), and confusion matrix for each model.
+"""
+
+from typing import Any
+
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.svm import SVC
+
+_DEFAULT_RANDOM_STATE = 42
+
+# Default models: Logistic Regression, Random Forest, SVM
+DEFAULT_MODELS: dict[str, Any] = {
+    "Logistic Regression": LogisticRegression(
+        random_state=_DEFAULT_RANDOM_STATE,
+        max_iter=1000,
+    ),
+    "Random Forest": RandomForestClassifier(
+        random_state=_DEFAULT_RANDOM_STATE,
+    ),
+    "SVM": SVC(
+        random_state=_DEFAULT_RANDOM_STATE,
+        kernel="rbf",
+    ),
+}
+
+
+def run_baseline(
+    model: Any,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+) -> dict[str, Any]:
+    """
+    Train a model and return metrics plus predictions.
+
+    Returns:
+        dict with keys: accuracy, f1_macro, precision_macro, recall_macro,
+        confusion_matrix, y_pred, n_classes
+    """
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    n_classes = len(np.unique(y_train))
+    avg = "macro" if n_classes > 2 else "binary"
+
+    zd = "warn"
+    return {
+        "accuracy": float(accuracy_score(y_test, y_pred)),
+        "f1_macro": float(f1_score(y_test, y_pred, average=avg, zero_division=zd)),
+        "precision_macro": float(precision_score(
+            y_test, y_pred, average=avg, zero_division=zd
+        )),
+        "recall_macro": float(recall_score(
+            y_test, y_pred, average=avg, zero_division=zd
+        )),
+        "confusion_matrix": confusion_matrix(y_test, y_pred),
+        "y_pred": y_pred,
+        "n_classes": n_classes,
+    }
+
+
+def evaluate_baselines(
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    *,
+    models: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """
+    Evaluate all baseline models on the given data.
+
+    Returns:
+        dict mapping model name -> result from run_baseline
+    """
+    models = models or DEFAULT_MODELS
+    results = {}
+    for name, model in models.items():
+        results[name] = run_baseline(model, X_train, X_test, y_train, y_test)
+    return results
