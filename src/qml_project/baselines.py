@@ -2,9 +2,10 @@
 Classical ML baselines for COMP47950 QML project.
 
 Logistic Regression, Random Forest, and SVM. Returns accuracy, F1 (macro),
-precision (macro), recall (macro), and confusion matrix for each model.
+precision (macro), recall (macro), confusion matrix, and timing data for each model.
 """
 
+import time
 from typing import Any
 
 import numpy as np
@@ -45,14 +46,19 @@ def run_baseline(
     y_test: np.ndarray,
 ) -> dict[str, Any]:
     """
-    Train a model and return metrics plus predictions.
+    Train a model and return metrics, predictions, and timing data.
 
     Returns:
         dict with keys: accuracy, f1_macro, precision_macro, recall_macro,
-        confusion_matrix, y_pred, n_classes
+        confusion_matrix, y_pred, n_classes, train_time_s, inference_time_s
     """
+    start = time.perf_counter()
     model.fit(X_train, y_train)
+    train_time = time.perf_counter() - start
+
+    start = time.perf_counter()
     y_pred = model.predict(X_test)
+    inference_time = time.perf_counter() - start
 
     n_classes = len(np.unique(y_train))
     avg = "macro" if n_classes > 2 else "binary"
@@ -70,6 +76,8 @@ def run_baseline(
         "confusion_matrix": confusion_matrix(y_test, y_pred),
         "y_pred": y_pred,
         "n_classes": n_classes,
+        "train_time_s": float(train_time),
+        "inference_time_s": float(inference_time),
     }
 
 
