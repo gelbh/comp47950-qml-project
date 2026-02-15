@@ -9,10 +9,47 @@ Compare **classical**, **simulated QML**, and **quantum-device (inference-only)*
 
 ## Development setup
 
-From the repo root, install the project in editable mode with MLflow support:
+The project uses **three separate virtual environments** to avoid dependency conflicts between quantum frameworks:
+
+| Environment | Purpose | Activate |
+|---|---|---|
+| `.venv-qiskit` | Qiskit simulation (training + evaluation) | `source .venv-qiskit/bin/activate` |
+| `.venv-pennylane` | PennyLane simulation (alternative framework) | `source .venv-pennylane/bin/activate` |
+| `.venv-device` | Real-device inference via IBM Quantum | `source .venv-device/bin/activate` |
+
+### Prerequisites
+
+Install [uv](https://docs.astral.sh/uv/) (fast Python package manager):
 
 ```bash
-pip install -e ".[mlflow]"
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Then run the main notebook from `notebooks/` (e.g. `jupyter notebook notebooks/qml_project.ipynb`). The `qml_project` package is used for datasets, preprocessing, and baselines.
+### Create environments
+
+From the repo root, use `make` to create any (or all) environments:
+
+```bash
+make env-qiskit      # Qiskit simulation
+make env-pennylane   # PennyLane simulation
+make env-device      # Real-device inference (IBM Quantum)
+```
+
+Each target creates a venv and installs the project in editable mode with the appropriate dependencies.
+
+### Usage
+
+Activate the environment you need, then run the notebook:
+
+```bash
+source .venv-qiskit/bin/activate
+jupyter notebook notebooks/qml_project.ipynb
+```
+
+The `qml_project` package (datasets, preprocessing, baselines) is available in all three environments.
+
+### Cleanup
+
+```bash
+make clean-envs      # Remove all three venvs
+```

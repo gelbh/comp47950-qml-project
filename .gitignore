@@ -7,6 +7,9 @@ venv/
 .venv/
 env/
 .env/
+.venv-qiskit/
+.venv-pennylane/
+.venv-device/
 
 # Python
 __pycache__/
@@ -38,3 +41,6 @@ data/processed/*
 .vscode/
 *.swp
 *.swo
+
+# Presentation
+presentation/

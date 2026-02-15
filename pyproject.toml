@@ -19,6 +19,26 @@ dependencies = [
 mlflow = [
     "mlflow>=2.17.0,<3",
 ]
+qiskit = [
+    "mlflow>=2.17.0,<3",
+    "qiskit>=1.3",
+    "qiskit-aer",
+    "jupyter",
+    "ipykernel",
+]
+pennylane = [
+    "mlflow>=2.17.0,<3",
+    "pennylane",
+    "jupyter",
+    "ipykernel",
+]
+device = [
+    "mlflow>=2.17.0,<3",
+    "qiskit>=1.3",
+    "qiskit-ibm-runtime",
+    "jupyter",
+    "ipykernel",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
