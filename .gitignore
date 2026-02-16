@@ -44,3 +44,6 @@ data/processed/*
 
 # Presentation
 presentation/
+
+# Notebooks
+notebooks/qml_project_midterm.ipynb
