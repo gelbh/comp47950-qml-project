@@ -13,3 +13,27 @@ from qml_project.circuit import (  # noqa: F401
     predict_from_probs,
     predict_batch,
 )
+
+from qml_project.training import (  # noqa: F401
+    TrainingHistory,
+    ExperimentResult,
+    MultiSeedSummary,
+    shots_for_eval,
+    evaluate_circuit,
+    train_classifier,
+    evaluate_classifier,
+    run_multi_seed_experiment,
+    create_depolarizing_noise_model,
+    create_noisy_sampler,
+)
+
+from qml_project.design_space import (  # noqa: F401
+    CircuitConfig,
+    DesignSpaceResult,
+    run_design_space,
+    summarize_results,
+    select_device_circuits,
+    qubit_sweep_configs,
+    depth_sweep_configs,
+    cz_sweep_configs,
+)
