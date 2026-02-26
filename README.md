@@ -11,11 +11,11 @@ Compare **classical**, **simulated QML**, and **quantum-device (inference-only)*
 
 The project uses **three separate virtual environments** to avoid dependency conflicts between quantum frameworks:
 
-| Environment | Purpose | Activate |
-|---|---|---|
-| `.venv-qiskit` | Qiskit simulation (training + evaluation) | `source .venv-qiskit/bin/activate` |
+| Environment       | Purpose                                      | Activate                              |
+| ----------------- | -------------------------------------------- | ------------------------------------- |
+| `.venv-qiskit`    | Qiskit simulation (training + evaluation)    | `source .venv-qiskit/bin/activate`    |
 | `.venv-pennylane` | PennyLane simulation (alternative framework) | `source .venv-pennylane/bin/activate` |
-| `.venv-device` | Real-device inference via IBM Quantum | `source .venv-device/bin/activate` |
+| `.venv-device`    | Real-device inference via IBM Quantum        | `source .venv-device/bin/activate`    |
 
 ### Prerequisites
 
@@ -46,7 +46,21 @@ source .venv-qiskit/bin/activate
 jupyter notebook notebooks/qml_project.ipynb
 ```
 
-The `qml_project` package (datasets, preprocessing, baselines) is available in all three environments.
+The `qml_project` package is available in all three environments.
+
+### Experiment tracking with MLflow
+
+This project uses MLflow to track design-space exploration runs, enabling systematic comparison of circuit configurations.
+
+**View tracked experiments:**
+
+```bash
+mlflow ui
+```
+
+Open [http://localhost:5000](http://localhost:5000) to browse runs, compare configurations, and view metrics.
+
+**Note:** MLflow is used during exploration but not required to view the final deliverable. To fully reproduce, include the `mlruns/` directory when archiving the project.
 
 ### Cleanup
 
