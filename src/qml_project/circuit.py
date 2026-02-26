@@ -1,7 +1,7 @@
 """
-Variational quantum classifier following Selig et al. [20].
+Variational quantum classifier.
 
-Implements the circuit design from Section 3 of the paper:
+Implements the circuit design:
   - Basic block: RX(π/2) → RZ(·) → RX(π/2), one per qubit per layer.
   - Alternating feature and parameter layers with CZ entanglement.
   - Bitstring-to-class output mapping (equal-range bins).
@@ -45,7 +45,7 @@ def cz_pairs_for_layer(
     """
     Select CZ-gate qubit pairs for one layer.
 
-    Strategies (from [20] Section 3):
+    Strategies:
       - ``"linear"``: Adjacent pairs (0,1), (1,2), …
       - ``"all"``: Every unique pair.
       - ``"random"``: 1 to *max_pairs* randomly chosen unique pairs.
@@ -74,7 +74,7 @@ def cz_pairs_for_layer(
 @dataclass
 class VariationalClassifier:
     """
-    A [20]-style variational quantum classifier circuit and its metadata.
+    A variational quantum classifier circuit and its metadata.
 
     Attributes
     ----------
@@ -163,7 +163,7 @@ def build_circuit(
     cz_seed: int = 42,
 ) -> VariationalClassifier:
     """
-    Construct a [20]-style variational classifier circuit.
+    Construct a variational classifier circuit.
 
     Parameters
     ----------
@@ -290,7 +290,7 @@ def build_circuit(
 
 
 # ---------------------------------------------------------------------------
-# Output mapping  ([20] Section 3)
+# Output mapping
 # ---------------------------------------------------------------------------
 
 
@@ -356,7 +356,7 @@ def counts_to_class_probs(
 
 
 # ---------------------------------------------------------------------------
-# Loss function  ([20] Equation 3)
+# Loss function
 # ---------------------------------------------------------------------------
 
 
@@ -367,7 +367,7 @@ def softmax_nll_loss(
     eps: float = 1e-10,
 ) -> float:
     """
-    Softmax negative-log-likelihood loss following [20] Eq. 3.
+    Softmax negative-log-likelihood loss.
 
     $$\\mathcal{L}(x, y) = -\\log\\frac{e^{P_y}}{\\sum_{k} e^{P_k}}$$
 

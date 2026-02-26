@@ -1,7 +1,7 @@
 """
 Preprocessing for COMP47950 QML project.
 
-Implements centre/scale, optional PCA, and [20] Selig et al. angle mapping.
+Implements centre/scale, optional PCA, and angle mapping for quantum encoding.
 Fit on training data only; transform both train and test.
 """
 
@@ -11,8 +11,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-# [20] Equation 2: f(x) = (1 - α²) π / q * W
-# Paper defaults: απ = π/10 (so α = 0.1), q = 3
+# Angle mapping: f(x) = (1 - α²) π / q * W; defaults α=0.1, q=3
 _ALPHA = 0.1
 _QUANTILE = 3
 
@@ -24,9 +23,9 @@ def apply_angle_mapping(
     q: float = _QUANTILE,
 ) -> np.ndarray:
     """
-    Apply [20] angle mapping: f(x) = (1 - α²) π / q * W.
+    Apply angle mapping: f(x) = (1 - α²) π / q * W.
 
-    W is the input (expected to be centred/scaled). Paper defaults α=0.1, q=3.
+    W is the input (expected to be centred/scaled). Defaults α=0.1, q=3.
     """
     scale = (1 - alpha**2) * np.pi / q
     return scale * X
@@ -82,7 +81,7 @@ class Preprocessor(NamedTuple):
 
 
 def make_preprocessor(n_components: int | None = None) -> Preprocessor:
-    """Create a Preprocessor. Set n_components for PCA (Wine: 8 or 12, BC: 12 or 16)."""
+    """Create a Preprocessor. Set n_components for optional PCA."""
     scaler = StandardScaler()
     pca = PCA(n_components=n_components) if n_components is not None else None
     return Preprocessor(scaler=scaler, pca=pca)
@@ -96,7 +95,7 @@ def preprocess(
     apply_angle_mapping_flag: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, Preprocessor]:
     """
-    Preprocess train and test: scale, optional PCA, optional [20] angle mapping.
+    Preprocess train and test: scale, optional PCA, optional angle mapping.
 
     Returns:
         X_train_processed, X_test_processed, fitted Preprocessor
