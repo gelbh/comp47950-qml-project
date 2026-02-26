@@ -1,14 +1,12 @@
 """
-Design-space exploration for the [20]-style variational quantum classifier.
+Design-space exploration for the variational quantum classifier.
 
 Systematically varies circuit hyperparameters (qubit count, depth, CZ strategy,
 feature count) and aggregates multi-seed results for comparison and device
 circuit selection.
 
-Addresses [20] Section 6 discussion points:
-  - Variance across CZ configurations.
-  - Width–depth trade-off (inflection point).
-  - Circuit selection for NISQ device inference.
+Covers variance across CZ configurations, width–depth trade-off (inflection
+point), and circuit selection for NISQ device inference.
 """
 
 from __future__ import annotations
@@ -96,6 +94,7 @@ def run_design_space(
     sampler_factory: Callable[[int], Any] | None = None,
     verbose: bool = True,
     log_interval: int = 25,
+    mlflow_experiment: str | None = None,
 ) -> list[DesignSpaceResult]:
     """
     Run multi-seed experiments across a list of circuit configurations.
@@ -142,6 +141,9 @@ def run_design_space(
         ops = vc_sample.circuit.count_ops()
         ops_by_name = {getattr(k, "name", str(k)): v for k, v in ops.items()}
 
+        # Generate MLflow run name
+        run_name = f"{cfg.label}_config{i}" if mlflow_experiment else None
+
         summary = run_multi_seed_experiment(
             vc_builder=cfg.build,
             X_train=X_train,
@@ -155,7 +157,28 @@ def run_design_space(
             sampler_factory=sampler_factory,
             verbose=verbose,
             log_interval=log_interval,
+            mlflow_experiment=mlflow_experiment,
+            mlflow_run_name=run_name,
         )
+
+        # Log circuit config parameters to MLflow (must access the parent run)
+        if mlflow_experiment:
+            try:
+                import mlflow
+                # The run should still be active from run_multi_seed_experiment
+                # Log additional circuit-specific parameters
+                mlflow.log_params({
+                    "config_name": cfg.name,
+                    "config_label": cfg.label,
+                    "n_layers": cfg.n_layers or "auto",
+                    "cz_strategy": cfg.cz_strategy,
+                    "cz_seed": cfg.cz_seed,
+                    "circuit_depth": vc_sample.circuit.depth(),
+                    "n_cz_gates": ops_by_name.get("cz", 0),
+                })
+            except Exception as e:
+                if verbose:
+                    print(f"Warning: MLflow config logging failed: {e}")
 
         results.append(
             DesignSpaceResult(
@@ -326,7 +349,7 @@ def cz_sweep_configs(
     Generate configs varying CZ strategy.
 
     For ``"random"`` strategy, multiple *cz_seeds* can be provided to
-    capture CZ-configuration variance ([20] Section 6).
+    capture CZ-configuration variance.
     """
     configs: list[CircuitConfig] = []
     for strat in strategies:

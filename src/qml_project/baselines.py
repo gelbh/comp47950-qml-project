@@ -88,15 +88,57 @@ def evaluate_baselines(
     y_test: np.ndarray,
     *,
     models: dict[str, Any] | None = None,
+    mlflow_experiment: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Evaluate all baseline models on the given data.
 
-    Returns:
-        dict mapping model name -> result from run_baseline
+    Parameters
+    ----------
+    mlflow_experiment : str or None
+        If provided, log all runs to this MLflow experiment.
+
+    Returns
+    -------
+    dict mapping model name -> result from run_baseline
     """
     models = models or DEFAULT_MODELS
     results = {}
+
+    # MLflow experiment setup
+    if mlflow_experiment:
+        try:
+            import mlflow
+            mlflow.set_experiment(mlflow_experiment)
+        except ImportError:
+            print("Warning: MLflow not available, skipping logging")
+            mlflow_experiment = None
+
     for name, model in models.items():
-        results[name] = run_baseline(model, X_train, X_test, y_train, y_test)
+        metrics = run_baseline(model, X_train, X_test, y_train, y_test)
+        results[name] = metrics
+
+        # Log to MLflow
+        if mlflow_experiment:
+            try:
+                import mlflow
+                with mlflow.start_run(run_name=name):
+                    mlflow.log_params({
+                        "model_type": type(model).__name__,
+                        "n_features": X_train.shape[1],
+                        "n_classes": metrics["n_classes"],
+                        "n_train_samples": X_train.shape[0],
+                        "n_test_samples": X_test.shape[0],
+                    })
+                    mlflow.log_metrics({
+                        "accuracy": metrics["accuracy"],
+                        "f1_macro": metrics["f1_macro"],
+                        "precision_macro": metrics["precision_macro"],
+                        "recall_macro": metrics["recall_macro"],
+                        "training_time": metrics["train_time_s"],
+                        "inference_time": metrics["inference_time_s"],
+                    })
+            except Exception as e:
+                print(f"Warning: MLflow logging failed for {name}: {e}")
+
     return results
