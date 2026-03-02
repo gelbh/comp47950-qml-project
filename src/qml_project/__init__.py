@@ -1,6 +1,9 @@
 """
 Shared code for COMP47950 Quantum Machine Learning project.
-Use for data loading, metrics, circuit helpers, or other logic reused across the notebook.
+
+General-purpose VQC, training, design-space, and baseline modules are exported
+here.  Nim-specific game logic, data generation, and policies are in the
+``qml_project.nim`` subpackage.
 """
 
 from qml_project.circuit import (  # noqa: F401
