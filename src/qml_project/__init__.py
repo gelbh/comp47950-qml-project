@@ -40,3 +40,20 @@ from qml_project.design_space import (  # noqa: F401
     depth_sweep_configs,
     cz_sweep_configs,
 )
+
+from qml_project.baselines import (  # noqa: F401
+    ClassicalResult,
+    SweepResults,
+    FeatureSet,
+    ABLATION_FEATURE_SETS,
+    FEATURE_SET_DESCRIPTIONS,
+    prepare_features,
+    engineer_parity_features,
+    create_models,
+    evaluate_model,
+    angle_encoding_kernel,
+    model_policy,
+    evaluate_win_rate,
+    run_classical_sweep,
+    run_baseline,
+)
