@@ -197,6 +197,70 @@ def class_balance_table(
     return pd.DataFrame(rows)
 
 
+def split_class_balance(
+    named_splits: dict[str, np.ndarray],
+) -> pd.DataFrame:
+    """Compute class balance for an arbitrary collection of label arrays.
+
+    Parameters
+    ----------
+    named_splits : dict[str, np.ndarray]
+        Mapping from split name (e.g. ``"Train"``, ``"Val"``, ``"OOD Test"``)
+        to a 1-D binary label array (1 = winning, 0 = losing).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``split``, ``n``, ``winning``, ``losing``, ``pct_losing``,
+        ``majority_baseline``.  ``majority_baseline`` is the accuracy of
+        always predicting the majority class.
+    """
+    rows: list[dict] = []
+    for name, y in named_splits.items():
+        n = len(y)
+        n_winning = int(y.sum())
+        n_losing = n - n_winning
+        majority = max(n_winning, n_losing)
+        rows.append(
+            {
+                "split": name,
+                "n": n,
+                "winning": n_winning,
+                "losing": n_losing,
+                "pct_losing": round(100 * n_losing / n, 1),
+                "majority_baseline": round(100 * majority / n, 1),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def majority_baseline_accuracy(y: np.ndarray) -> float:
+    """Return the accuracy (0–1) of always predicting the majority class."""
+    n = len(y)
+    n_majority = max(int(y.sum()), n - int(y.sum()))
+    return n_majority / n
+
+
+def compute_class_weights(y: np.ndarray) -> dict[int, float]:
+    """Compute ``sklearn``-style ``'balanced'`` class weights.
+
+    Weights are ``n / (n_classes * n_k)`` for each class *k*, matching
+    ``sklearn.utils.class_weight.compute_class_weight(..., class_weight='balanced')``.
+
+    Returns a dict ``{0: w_losing, 1: w_winning}`` suitable for passing to
+    ``class_weight`` parameters in sklearn estimators or for scaling a custom
+    loss function.
+    """
+    n = len(y)
+    n_classes = 2
+    n_0 = int((y == 0).sum())
+    n_1 = int((y == 1).sum())
+    return {
+        0: n / (n_classes * n_0),
+        1: n / (n_classes * n_1),
+    }
+
+
 # ---------------------------------------------------------------------------
 # IID splitting
 # ---------------------------------------------------------------------------
@@ -433,6 +497,257 @@ def ood_split(
         M_train=M_train,
         M_test=M_test,
     )
+
+
+# ---------------------------------------------------------------------------
+# S_3 heap permutation symmetry
+# ---------------------------------------------------------------------------
+
+_S3_PERMS: list[tuple[int, ...]] = list(itertools.permutations(range(3)))
+"""All 6 permutations of (0, 1, 2) — the S_3 symmetric group for k=3 heaps."""
+
+
+def all_heap_permutations(
+    state: np.ndarray,
+) -> list[tuple[int, ...]]:
+    """Return all distinct permutations of a single heap-size vector.
+
+    Parameters
+    ----------
+    state : array-like, shape ``(k,)``
+        A single state (heap sizes).
+
+    Returns
+    -------
+    list[tuple[int, ...]]
+        Unique permutations, sorted lexicographically.
+    """
+    native = tuple(int(x) for x in state)
+    return sorted(set(itertools.permutations(native)))
+
+
+def augment_s3(
+    X: np.ndarray,
+    y: np.ndarray,
+    *,
+    deduplicate: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Augment a dataset by applying all S_3 heap permutations.
+
+    For each row in *X*, generates all permutations of the heap vector.
+    Labels in *y* must be permutation-invariant (e.g. win/loss based on
+    Nim-sum).  For move-index labels (Option A), use :func:`augment_s3_moves`.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape ``(n, k)``
+        Heap-size arrays.  Only ``k = 3`` is currently supported.
+    y : np.ndarray, shape ``(n,)``
+        Permutation-invariant labels (e.g. ``is_winning``).
+    deduplicate : bool
+        If *True*, drop duplicate rows that arise from states with
+        repeated heap sizes (e.g. ``(3, 3, 5)`` has only 3 unique
+        permutations).
+
+    Returns
+    -------
+    X_aug, y_aug : np.ndarray
+        Augmented arrays.  When *deduplicate* is True, expansion factor
+        is ≤ 6× (exactly 6× only when all heaps are distinct in every
+        row).
+    """
+    k = X.shape[1]
+    if k != 3:
+        raise ValueError(f"augment_s3 currently supports k=3, got k={k}")
+
+    perms = np.array(_S3_PERMS, dtype=np.intp)  # (6, 3)
+    n = X.shape[0]
+
+    # Vectorised: broadcast X[i] through all 6 permutations
+    X_expanded = X[:, perms]  # (n, 6, 3)
+    X_flat = X_expanded.reshape(-1, k)  # (n*6, 3)
+    y_flat = np.repeat(y, len(perms))
+
+    if deduplicate:
+        _, unique_idx = np.unique(X_flat, axis=0, return_index=True)
+        unique_idx.sort()
+        X_flat = X_flat[unique_idx]
+        y_flat = y_flat[unique_idx]
+
+    return X_flat, y_flat
+
+
+def augment_s3_moves(
+    X: np.ndarray,
+    y_move: np.ndarray,
+    *,
+    M: int,
+    deduplicate: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Augment a dataset with S_3 permutations, remapping move indices.
+
+    Unlike :func:`augment_s3`, this correctly permutes Option A move labels:
+    if the original move is from heap *i*, the permuted move is from the
+    heap that position *i* was mapped to.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape ``(n, 3)``
+    y_move : np.ndarray, shape ``(n,)``
+        Flat move indices (``heap * M + (amount - 1)``).
+    M : int
+        Maximum heap size (for move encoding).
+    deduplicate : bool
+        If *True*, keeps only the first occurrence of each unique state
+        (and its corresponding permuted move label).
+
+    Returns
+    -------
+    X_aug, y_move_aug : np.ndarray
+    """
+    k = X.shape[1]
+    if k != 3:
+        raise ValueError(f"augment_s3_moves currently supports k=3, got k={k}")
+
+    perms = np.array(_S3_PERMS, dtype=np.intp)  # (6, 3)
+    inv_perms = np.empty_like(perms)
+    for i, p in enumerate(perms):
+        for j, v in enumerate(p):
+            inv_perms[i, v] = j
+
+    n = X.shape[0]
+    X_expanded = X[:, perms]  # (n, 6, 3)
+    X_flat = X_expanded.reshape(-1, k)
+
+    # Remap move labels: original (heap, amount) → (inv_perm[heap], amount)
+    heaps_orig = y_move // M        # (n,)
+    amounts_m1 = y_move % M         # amount - 1
+
+    # For each of the 6 perms, compute the new heap index
+    # inv_perms[:, heap_orig] gives the new heap index for each perm
+    new_heaps = inv_perms[:, heaps_orig]  # (6, n)
+    new_heaps = new_heaps.T.ravel()       # (n*6,)
+    amounts_flat = np.tile(amounts_m1, len(perms))
+    y_flat = new_heaps * M + amounts_flat
+
+    if deduplicate:
+        _, unique_idx = np.unique(X_flat, axis=0, return_index=True)
+        unique_idx.sort()
+        X_flat = X_flat[unique_idx]
+        y_flat = y_flat[unique_idx]
+
+    return X_flat, y_flat
+
+
+def canonical_order(
+    X: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Sort heap sizes in ascending order (canonical form under S_3).
+
+    Collapsing all permutations of a state into one canonical representative
+    reduces the effective state space.  For ``k = 3, M = 7`` the 511
+    non-terminal states collapse to the number of unique sorted tuples.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape ``(n, k)``
+
+    Returns
+    -------
+    X_sorted : np.ndarray, shape ``(n, k)``
+        Heap sizes sorted ascending within each row
+        (``h_1 \\leq h_2 \\leq h_3``).
+    sort_perms : np.ndarray, shape ``(n, k)``
+        The ``argsort`` permutation applied to each row.  Useful for
+        mapping a predicted move index back to the original heap ordering.
+    """
+    sort_perms = np.argsort(X, axis=1).astype(np.intp)
+    X_sorted = np.take_along_axis(X, sort_perms, axis=1)
+    return X_sorted, sort_perms
+
+
+def remap_move_to_original(
+    move_idx: int | np.ndarray,
+    sort_perm: np.ndarray,
+    *,
+    M: int,
+) -> int | np.ndarray:
+    """Map a predicted move index from canonical heap order back to original.
+
+    After canonical ordering, heap indices refer to sorted positions.  This
+    function translates the predicted heap index back to the original
+    (unsorted) heap index using the stored ``argsort`` permutation.
+
+    Parameters
+    ----------
+    move_idx : int or np.ndarray
+        Flat move index in the canonical (sorted) frame.
+    sort_perm : np.ndarray, shape ``(k,)`` or ``(n, k)``
+        The ``argsort`` permutation from :func:`canonical_order`.
+    M : int
+        Maximum heap size.
+    """
+    scalar = np.isscalar(move_idx)
+    move_idx = np.atleast_1d(np.asarray(move_idx))
+    sort_perm = np.atleast_2d(sort_perm)
+
+    sorted_heap = move_idx // M
+    amount_m1 = move_idx % M
+
+    # sort_perm[i] maps original positions → sorted positions;
+    # sort_perm[i, j] = original position that ended up in sorted position j.
+    # So original_heap = sort_perm[i, sorted_heap[i]].
+    if sort_perm.shape[0] == 1:
+        original_heap = sort_perm[0, sorted_heap]
+    else:
+        original_heap = sort_perm[np.arange(len(move_idx)), sorted_heap]
+
+    result = original_heap * M + amount_m1
+    return int(result[0]) if scalar else result
+
+
+def count_canonical_states(k: int = 3, M: int = 7) -> int:
+    """Count unique states under canonical (sorted ascending) ordering.
+
+    This is the number of non-terminal multisets
+    ``{h_1, h_2, …, h_k}`` with ``0 ≤ h_i ≤ M``, excluding all-zeros.
+    Equivalently, the number of *k*-element multisets from ``{0, …, M}``
+    minus 1 (for the terminal state).
+    """
+    states = enumerate_states(k, M)
+    canonical = {tuple(sorted(s)) for s in states}
+    return len(canonical)
+
+
+def augmentation_stats(
+    X: np.ndarray,
+) -> pd.DataFrame:
+    """Compute per-state augmentation expansion statistics.
+
+    For each row in *X*, reports how many unique S_3 permutations exist
+    (depends on heap repetitions).
+
+    Returns a DataFrame with columns: ``state``, ``n_unique_perms``,
+    ``n_total_perms``, ``expansion_factor``.
+    """
+    rows: list[dict] = []
+    seen: set[tuple[int, ...]] = set()
+    for state in X:
+        key = tuple(state)
+        if key in seen:
+            continue
+        seen.add(key)
+        n_unique = len(set(itertools.permutations(state)))
+        rows.append(
+            {
+                "state": key,
+                "n_unique_perms": n_unique,
+                "n_total_perms": 6,
+                "expansion_factor": n_unique,
+            }
+        )
+    df = pd.DataFrame(rows)
+    return df
 
 
 # ---------------------------------------------------------------------------
