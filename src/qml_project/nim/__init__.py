@@ -30,7 +30,6 @@ from qml_project.nim.game import (  # noqa: F401
 
 from qml_project.nim.data import (  # noqa: F401
     NimDataset,
-    SplitArrays,
     TrainSubset,
     OODSplit,
     NimExperimentData,
@@ -42,7 +41,6 @@ from qml_project.nim.data import (  # noqa: F401
     split_class_balance,
     majority_baseline_accuracy,
     compute_class_weights,
-    iid_split,
     training_subsets,
     ood_split,
     normalise_states,

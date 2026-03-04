@@ -261,76 +261,6 @@ def compute_class_weights(y: np.ndarray) -> dict[int, float]:
 
 
 # ---------------------------------------------------------------------------
-# IID splitting
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class SplitArrays:
-    """Train / validation / test arrays with index tracking."""
-
-    X_train: np.ndarray
-    X_val: np.ndarray
-    X_test: np.ndarray
-    y_train: np.ndarray
-    y_val: np.ndarray
-    y_test: np.ndarray
-    idx_train: np.ndarray
-    idx_val: np.ndarray
-    idx_test: np.ndarray
-
-
-def iid_split(
-    dataset: NimDataset,
-    *,
-    val_size: float = 0.15,
-    test_size: float = 0.15,
-    random_state: int = 42,
-) -> SplitArrays:
-    """70/15/15 stratified train/val/test split on a :class:`NimDataset`.
-
-    Stratification is on ``is_winning`` to preserve the win/loss ratio in every
-    partition.
-    """
-    n = len(dataset)
-    indices = np.arange(n)
-    X = dataset.states
-    y = dataset.is_winning
-
-    remaining_frac = val_size + test_size
-    X_train, X_tmp, y_train, y_tmp, idx_train, idx_tmp = train_test_split(
-        X,
-        y,
-        indices,
-        test_size=remaining_frac,
-        stratify=y,
-        random_state=random_state,
-    )
-
-    val_of_remaining = val_size / remaining_frac
-    X_val, X_test, y_val, y_test, idx_val, idx_test = train_test_split(
-        X_tmp,
-        y_tmp,
-        idx_tmp,
-        test_size=1.0 - val_of_remaining,
-        stratify=y_tmp,
-        random_state=random_state,
-    )
-
-    return SplitArrays(
-        X_train=X_train,
-        X_val=X_val,
-        X_test=X_test,
-        y_train=y_train,
-        y_val=y_val,
-        y_test=y_test,
-        idx_train=idx_train,
-        idx_val=idx_val,
-        idx_test=idx_test,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Training-size subsets
 # ---------------------------------------------------------------------------
 
@@ -776,16 +706,14 @@ def normalise_states(
 class NimExperimentData:
     """All data needed for the experiment.
 
-    The reported experiment uses :attr:`ood` train/test and
-    :func:`training_subsets` on :attr:`ood.X_train` / :attr:`ood.y_train`
+    The reported experiment uses :attr:`split` (OOD) train/test and
+    :func:`training_subsets` on :attr:`split.X_train` / :attr:`split.y_train`
     for the sample-efficiency sweep (subsets 50, 100, full=215).
-    :attr:`iid` is retained for optional use.
     """
 
     dataset: NimDataset
-    iid: SplitArrays
     subsets: dict[int | str, TrainSubset]
-    ood: OODSplit
+    split: OODSplit
     balance_table: pd.DataFrame
 
 
@@ -793,40 +721,38 @@ def prepare_experiment_data(
     k: int = 3,
     M: int = 7,
     *,
-    M_train_ood: int = 5,
+    M_train: int = 5,
     subset_sizes: Sequence[int] = (50, 100),
     random_state: int = 42,
 ) -> NimExperimentData:
     """One-call setup for the Nim ML experiment.
 
-    Generates the dataset, train/test split (train heaps ≤ M_train_ood,
-    test heaps > M_train_ood), training-size subsets from the train set,
+    Generates the dataset, OOD train/test split (train heaps ≤ M_train,
+    test heaps > M_train), training-size subsets from the train set,
     and class balance table. For the sample-efficiency experiment, use
-    the returned :attr:`ood` and build subsets from :attr:`ood.X_train`.
+    the returned :attr:`split` and build subsets from :attr:`split.X_train`.
 
     Parameters
     ----------
     k, M : int
         Primary configuration (heaps, max size).
-    M_train_ood : int
-        Training cutoff (train on heaps ≤ this, test on larger).
+    M_train : int
+        OOD training cutoff (train on heaps ≤ this, test on larger).
     subset_sizes : sequence of int
         Subset sizes for training-size sweep.
     random_state : int
         Master seed for all splitting and labelling.
     """
     dataset = generate_dataset(k, M, random_state=random_state)
-    iid = iid_split(dataset, random_state=random_state)
+    split = ood_split(k, M_train=M_train, M_test=M, random_state=random_state)
     subsets = training_subsets(
-        iid.X_train, iid.y_train, sizes=subset_sizes, random_state=random_state
+        split.X_train, split.y_train, sizes=subset_sizes, random_state=random_state
     )
-    ood = ood_split(k, M_train=M_train_ood, M_test=M, random_state=random_state)
     balance = class_balance_table(M_values=range(1, M + 1), k=k)
 
     return NimExperimentData(
         dataset=dataset,
-        iid=iid,
         subsets=subsets,
-        ood=ood,
+        split=split,
         balance_table=balance,
     )
