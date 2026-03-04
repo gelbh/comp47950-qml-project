@@ -46,6 +46,7 @@ from qml_project.baselines import (  # noqa: F401
     SweepResults,
     FeatureSet,
     ABLATION_FEATURE_SETS,
+    ABLATION_FEATURE_SETS_NO_RAW,
     FEATURE_SET_DESCRIPTIONS,
     prepare_features,
     engineer_parity_features,

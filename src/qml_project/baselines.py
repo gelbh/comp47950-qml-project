@@ -56,6 +56,11 @@ ABLATION_FEATURE_SETS: tuple[FeatureSet, ...] = (
     "raw", "heap_parity", "pairwise_xor", "bit_parity", "parity",
 )
 
+# Parity-style feature sets only (excludes "raw" to avoid overlap with main sweep)
+ABLATION_FEATURE_SETS_NO_RAW: tuple[FeatureSet, ...] = tuple(
+    fs for fs in ABLATION_FEATURE_SETS if fs != "raw"
+)
+
 FEATURE_SET_DESCRIPTIONS: dict[str, str] = {
     "raw": "Normalised heaps (3)",
     "heap_parity": "+ heap parities (6)",
@@ -254,7 +259,11 @@ def create_models(
 
 @dataclass
 class ClassicalResult:
-    """Full evaluation result for a single classical model run."""
+    """Full evaluation result for a single classical model run.
+
+    When loaded from MLflow cache, ``cm`` and ``y_pred`` are None
+    (not logged to MLflow). Downstream code should check before using.
+    """
 
     model_name: str
     accuracy: float
@@ -263,10 +272,10 @@ class ClassicalResult:
     f1: float
     precision: float
     recall: float
-    cm: np.ndarray
-    y_pred: np.ndarray
-    train_time_s: float
-    inference_time_s: float
+    cm: np.ndarray | None = None
+    y_pred: np.ndarray | None = None
+    train_time_s: float = 0.0
+    inference_time_s: float = 0.0
     # Sweep metadata
     seed: int = 42
     train_size: int | str = "full"
@@ -383,7 +392,6 @@ class SweepConfig:
     symmetry: str  # "none" or "augmented"
     train_size: int | str
     seed: int
-    regime: str = "ood"  # "ood" (default) or "iid"
 
 
 @dataclass
@@ -440,6 +448,103 @@ def _make_feature_fn(
     return fn
 
 
+def _load_sweep_from_mlflow(
+    experiment_name: str,
+    model_names: Sequence[str],
+    feature_sets: Sequence[FeatureSet],
+    symmetry_variants: Sequence[str],
+    train_sizes: Sequence[int | str],
+    seeds: Sequence[int],
+    regime: str,
+    *,
+    full_train_size: int,
+) -> dict[tuple[str, str, str, int, int], ClassicalResult]:
+    """Load classical sweep results from MLflow runs (cache lookup).
+
+    Returns a dict keyed by (model_name, feature_set, symmetry, train_size, seed).
+    Only includes runs that match the requested grid and regime; when multiple
+    runs exist for the same params, the latest (by end_time) is used.
+    """
+    try:
+        from mlflow.tracking import MlflowClient
+    except ImportError:
+        return {}
+
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(experiment_name)
+    if exp is None:
+        return {}
+
+    runs = client.search_runs(
+        experiment_ids=[exp.experiment_id],
+        order_by=["end_time DESC"],
+        max_results=10_000,
+    )
+
+    # Set of keys we want (train_size as int; "full" -> full_train_size)
+    wanted: set[tuple[str, str, str, int, int]] = set()
+    for model in model_names:
+        for fs in feature_sets:
+            for sym in symmetry_variants:
+                for tsz in train_sizes:
+                    size = full_train_size if tsz == "full" else int(tsz)
+                    for seed in seeds:
+                        wanted.add((model, fs, sym, size, seed))
+
+    cache: dict[tuple[str, str, str, int, int], ClassicalResult] = {}
+    for run in runs:
+        if run.info.status != "FINISHED":
+            continue
+        params = run.data.params
+        metrics = run.data.metrics
+        model = params.get("model")
+        fs = params.get("feature_set")
+        sym = params.get("symmetry")
+        train_size_str = params.get("train_size")
+        seed_str = params.get("seed")
+        reg = params.get("regime")
+        if (
+            model is None
+            or fs is None
+            or sym is None
+            or train_size_str is None
+            or seed_str is None
+            or reg is None
+            or reg != regime
+        ):
+            continue
+        try:
+            train_size_int = int(train_size_str)
+            seed_int = int(seed_str)
+        except (TypeError, ValueError):
+            continue
+        # Narrow types after None checks (params from MLflow are string values)
+        assert isinstance(model, str) and isinstance(fs, str) and isinstance(sym, str)
+        key: tuple[str, str, str, int, int] = (model, fs, sym, train_size_int, seed_int)
+        if key not in wanted or key in cache:
+            continue
+        cache[key] = ClassicalResult(
+            model_name=model,
+            accuracy=float(metrics.get("accuracy", 0.0)),
+            balanced_accuracy=float(metrics.get("balanced_accuracy", 0.0)),
+            mcc=float(metrics.get("mcc", 0.0)),
+            f1=float(metrics.get("f1", 0.0)),
+            precision=float(metrics.get("precision", 0.0)),
+            recall=float(metrics.get("recall", 0.0)),
+            cm=None,
+            y_pred=None,
+            train_time_s=float(metrics.get("train_time_s", 0.0)),
+            inference_time_s=float(metrics.get("inference_time_s", 0.0)),
+            seed=seed_int,
+            train_size=train_size_int,
+            feature_set=fs,
+            symmetry=sym,
+            regime=reg,
+            win_rate=metrics.get("win_rate"),
+        )
+    return cache
+
+
 def run_classical_sweep(
     X_train_raw: np.ndarray,
     y_train: np.ndarray,
@@ -452,13 +557,19 @@ def run_classical_sweep(
     train_sizes: Sequence[int | str] = (50, 100, "full"),
     seeds: Sequence[int] = tuple(range(10)),
     M: int = 7,
-    regime: str = "ood",
     compute_win_rate: bool = True,
     n_games_win_rate: int = 500,
     mlflow_experiment: str | None = None,
+    use_cache: bool = True,
+    force_rerun: bool = False,
     verbose: bool = True,
 ) -> SweepResults:
     """Run the full classical baseline sweep over configurations.
+
+    When ``use_cache=True`` and ``mlflow_experiment`` is set, existing runs
+    in that experiment that match the sweep grid are loaded from MLflow
+    instead of re-running. Pass ``force_rerun=True`` or ``use_cache=False``
+    to ignore cache (e.g. after changing train/test data).
 
     Parameters
     ----------
@@ -481,14 +592,17 @@ def run_classical_sweep(
         (for non-deterministic models) model randomness.
     M : int
         Maximum heap size (for feature engineering and win-rate eval).
-    regime : str
-        ``"ood"`` (default): train M≤5, test M>5. Affects MLflow logging only.
     compute_win_rate : bool
         Whether to evaluate win rate via game play (slower).
     n_games_win_rate : int
         Games per win-rate evaluation.
     mlflow_experiment : str or None
         If provided, log each run to this MLflow experiment.
+    use_cache : bool
+        If True and mlflow_experiment is set, load matching runs from MLflow
+        and only run missing grid points. Default True.
+    force_rerun : bool
+        If True, ignore cache and run all grid points. Default False.
     verbose : bool
         Print progress.
     """
@@ -509,6 +623,23 @@ def run_classical_sweep(
             mlflow_mod = _mlflow
         except ImportError:
             warnings.warn("MLflow not installed; skipping logging.", stacklevel=2)
+
+    # Load cache when use_cache and experiment set and not forcing rerun
+    cache: dict[tuple[str, str, str, int, int], ClassicalResult] = {}
+    if use_cache and not force_rerun and mlflow_mod and mlflow_experiment:
+        full_train_size = len(X_train_raw)
+        cache = _load_sweep_from_mlflow(
+            mlflow_experiment,
+            model_names,
+            feature_sets,
+            symmetry_variants,
+            train_sizes,
+            seeds,
+            "ood",
+            full_train_size=full_train_size,
+        )
+        if verbose and cache:
+            print(f"  Loaded {len(cache)} runs from MLflow cache.")
 
     sweep = SweepResults()
     total = (
@@ -539,6 +670,17 @@ def run_classical_sweep(
                         else:
                             continue
 
+                        result_train_size = (
+                            len(X_sub) if tsz == "full" else int(tsz)
+                        )
+                        cache_key = (model_name, fs, sym, result_train_size, seed)
+                        if cache_key in cache:
+                            sweep.results.append(cache[cache_key])
+                            done += 1
+                            if verbose and done % 20 == 0:
+                                print(f"  [{done}/{total}] runs complete")
+                            continue
+
                         # Apply symmetry augmentation
                         if sym == "augmented":
                             X_sub_use, y_sub_use = augment_s3(
@@ -559,10 +701,12 @@ def run_classical_sweep(
                             model_name=model_name,
                         )
                         result.seed = seed
-                        result.train_size = tsz if isinstance(tsz, int) else len(X_sub)
+                        result.train_size = (
+                            tsz if isinstance(tsz, int) else len(X_sub)
+                        )
                         result.feature_set = fs
                         result.symmetry = sym
-                        result.regime = regime
+                        result.regime = "ood"
 
                         # Win rate
                         if compute_win_rate:
