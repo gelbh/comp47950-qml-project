@@ -28,14 +28,6 @@ eggs/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data
-data/*.csv
-data/*.parquet
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-
 # IDE
 .idea/
 .vscode/
