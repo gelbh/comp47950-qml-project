@@ -6,7 +6,10 @@ five feature sets (raw, heap_parity, pairwise_xor, bit_parity, full parity),
 S_3 symmetry augmentation, multi-seed sweeps, win-rate evaluation via game
 play, and MLflow logging.
 
-Primary target: Option B (state → win/loss).
+OOD design: train on M≤5 (subsets 50, 100, full=215), test on M>5
+(296 states). Pass OOD train/test arrays to :func:`run_classical_sweep`.
+
+Primary target: state → win/loss classification.
 """
 
 from __future__ import annotations
@@ -269,7 +272,7 @@ class ClassicalResult:
     train_size: int | str = "full"
     feature_set: str = "raw"
     symmetry: str = "none"
-    regime: str = "iid"
+    regime: str = "ood"
     win_rate: float | None = None
 
 
@@ -380,7 +383,7 @@ class SweepConfig:
     symmetry: str  # "none" or "augmented"
     train_size: int | str
     seed: int
-    regime: str = "iid"  # "iid" or "ood"
+    regime: str = "ood"  # "ood" (default) or "iid"
 
 
 @dataclass
@@ -446,10 +449,10 @@ def run_classical_sweep(
     model_names: Sequence[str] = ("SVM (RBF)", "Random Forest", "Logistic Regression"),
     feature_sets: Sequence[FeatureSet] = ("raw", "parity"),
     symmetry_variants: Sequence[str] = ("none", "augmented"),
-    train_sizes: Sequence[int | str] = (50, 100, 200, "full"),
+    train_sizes: Sequence[int | str] = (50, 100, "full"),
     seeds: Sequence[int] = tuple(range(10)),
     M: int = 7,
-    regime: str = "iid",
+    regime: str = "ood",
     compute_win_rate: bool = True,
     n_games_win_rate: int = 500,
     mlflow_experiment: str | None = None,
@@ -479,7 +482,7 @@ def run_classical_sweep(
     M : int
         Maximum heap size (for feature engineering and win-rate eval).
     regime : str
-        ``"iid"`` or ``"ood"`` (metadata only — affects logging).
+        ``"ood"`` (default): train M≤5, test M>5. Affects MLflow logging only.
     compute_win_rate : bool
         Whether to evaluate win rate via game play (slower).
     n_games_win_rate : int

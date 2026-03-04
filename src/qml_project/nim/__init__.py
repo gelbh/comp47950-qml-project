@@ -3,7 +3,7 @@ Nim game logic, data generation, and policies for the QML project.
 
 Submodules:
   - game: Nim rules, state representation, Nim-sum, optimal moves, play.
-  - data: State enumeration, labelling, IID/OOD splits, training-size subsets.
+  - data: State enumeration, labelling, train/test split (train M≤5, test M>5), training-size subsets.
 
 Import public symbols from the top-level subpackage::
 

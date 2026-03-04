@@ -3,11 +3,10 @@
 Generates the complete dataset for the Nim QML project:
 
 * **State enumeration** — all non-terminal states for arbitrary *k* and *M*.
-* **Labelling** — win/loss (Option B) and optimal-move index (Option A).
-* **IID regime** — 70/15/15 stratified train/val/test split with training-size
-  subsets (50, 100, 200, 500, full).
-* **OOD regime** — train on states with all heaps ≤ *M_train*, test on states
-  with at least one heap > *M_train*.
+* **Labelling** — win/loss (primary) and optimal-move index (secondary).
+* **OOD split:** Train on states with all heaps ≤ *M_train* (215 for M_train=5),
+  test on states with at least one heap > *M_train* (296). Training-size
+  subsets: **50, 100, full (215)**.
 * **Class balance** — win/loss ratio tables for each *M*.
 
 All splits are stratified by the binary win/loss label and use explicit
@@ -35,7 +34,7 @@ from qml_project.nim.game import (
 )
 
 # ---------------------------------------------------------------------------
-# Move-index encoding (Option A)
+# Move-index encoding
 # ---------------------------------------------------------------------------
 
 
@@ -88,7 +87,7 @@ class NimDataset:
     nim_sums : np.ndarray
         Shape ``(n,)`` — Nim-sum of each state.
     optimal_move_idx : np.ndarray
-        Shape ``(n,)`` — flat move index for Option A labelling.
+        Shape ``(n,)`` — flat move index for move-prediction labelling.
     k : int
         Number of heaps.
     M : int
@@ -134,7 +133,7 @@ def generate_dataset(
         Number of heaps and maximum heap size.
     random_state : int
         Seed for the RNG used to select moves for losing positions
-        (Option A labelling — any legal move is acceptable).
+        (move-index labelling — any legal move is acceptable).
 
     Returns
     -------
@@ -349,7 +348,7 @@ class TrainSubset:
 def training_subsets(
     X_train: np.ndarray,
     y_train: np.ndarray,
-    sizes: Sequence[int] = (50, 100, 200),
+    sizes: Sequence[int] = (50, 100),
     *,
     random_state: int = 42,
 ) -> dict[int | str, TrainSubset]:
@@ -358,7 +357,8 @@ def training_subsets(
     Parameters
     ----------
     X_train, y_train
-        Full training arrays (from :func:`iid_split`).
+        Full training arrays (from the train set; for the experiment this
+        is the M≤5 train set, so ``"full"`` = 215).
     sizes
         Subset sizes to generate.  Sizes ≥ ``len(X_train)`` are skipped
         (the full training set is always included as key ``"full"``).
@@ -536,7 +536,7 @@ def augment_s3(
 
     For each row in *X*, generates all permutations of the heap vector.
     Labels in *y* must be permutation-invariant (e.g. win/loss based on
-    Nim-sum).  For move-index labels (Option A), use :func:`augment_s3_moves`.
+    Nim-sum).  For move-index labels, use :func:`augment_s3_moves`.
 
     Parameters
     ----------
@@ -586,7 +586,7 @@ def augment_s3_moves(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Augment a dataset with S_3 permutations, remapping move indices.
 
-    Unlike :func:`augment_s3`, this correctly permutes Option A move labels:
+    Unlike :func:`augment_s3`, this correctly permutes move-index labels:
     if the original move is from heap *i*, the permuted move is from the
     heap that position *i* was mapped to.
 
@@ -761,8 +761,8 @@ def normalise_states(
 ) -> np.ndarray:
     """Divide heap sizes by a fixed *M_max* to get features in [0, 1].
 
-    Uses a **global constant** (not per-split statistics) so that feature ranges
-    are consistent across IID and OOD regimes.
+    Uses a **global constant** (not per-split statistics) so that feature
+    ranges are consistent between train and test.
     """
     return states.astype(np.float64) / M_max
 
@@ -774,7 +774,13 @@ def normalise_states(
 
 @dataclass
 class NimExperimentData:
-    """All data needed for the IID and OOD experimental regimes."""
+    """All data needed for the experiment.
+
+    The reported experiment uses :attr:`ood` train/test and
+    :func:`training_subsets` on :attr:`ood.X_train` / :attr:`ood.y_train`
+    for the sample-efficiency sweep (subsets 50, 100, full=215).
+    :attr:`iid` is retained for optional use.
+    """
 
     dataset: NimDataset
     iid: SplitArrays
@@ -788,22 +794,24 @@ def prepare_experiment_data(
     M: int = 7,
     *,
     M_train_ood: int = 5,
-    subset_sizes: Sequence[int] = (50, 100, 200),
+    subset_sizes: Sequence[int] = (50, 100),
     random_state: int = 42,
 ) -> NimExperimentData:
-    """One-call setup for the full Nim ML experiment.
+    """One-call setup for the Nim ML experiment.
 
-    Generates the complete dataset, IID splits, training-size subsets,
-    OOD split, and class balance table.
+    Generates the dataset, train/test split (train heaps ≤ M_train_ood,
+    test heaps > M_train_ood), training-size subsets from the train set,
+    and class balance table. For the sample-efficiency experiment, use
+    the returned :attr:`ood` and build subsets from :attr:`ood.X_train`.
 
     Parameters
     ----------
     k, M : int
         Primary configuration (heaps, max size).
     M_train_ood : int
-        OOD training cutoff (train on heaps ≤ this, test on larger).
+        Training cutoff (train on heaps ≤ this, test on larger).
     subset_sizes : sequence of int
-        Training-size subsets for sample-efficiency sweep.
+        Subset sizes for training-size sweep.
     random_state : int
         Master seed for all splitting and labelling.
     """
