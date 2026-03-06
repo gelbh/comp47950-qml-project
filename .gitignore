@@ -36,3 +36,8 @@ eggs/
 
 # Presentation
 presentation/
+
+# Tmp
+src_midterm/
+qml_project_midterm.ipynb
+midterm_submission_list.md
