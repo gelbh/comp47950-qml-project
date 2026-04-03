@@ -1,6 +1,6 @@
 # Quantum Machine Learning (COMP47950)
 
-[![COMP47950](https://img.shields.io/badge/Course-COMP47950-blue)](#)
+![COMP47950](https://img.shields.io/badge/Course-COMP47950-blue)
 [![Python](https://img.shields.io/badge/Python-3.x-informational)](https://python.org)
 [![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange)](https://jupyter.org)
 [![MLflow](https://img.shields.io/badge/MLflow-Tracking-purple)](https://mlflow.org)
@@ -9,13 +9,13 @@ Compare **classical**, **simulated QML**, and **quantum-device (inference-only)*
 
 ## Development setup
 
-The project uses **three separate virtual environments** to avoid dependency conflicts between quantum frameworks:
+The project uses **three separate uv-managed environments** to avoid dependency conflicts between quantum frameworks:
 
-| Environment       | Purpose                                      | Activate                              |
-| ----------------- | -------------------------------------------- | ------------------------------------- |
-| `.venv-qiskit`    | Qiskit simulation (training + evaluation)    | `source .venv-qiskit/bin/activate`    |
-| `.venv-pennylane` | PennyLane simulation (alternative framework) | `source .venv-pennylane/bin/activate` |
-| `.venv-device`    | Real-device inference via IBM Quantum        | `source .venv-device/bin/activate`    |
+| Environment       | Purpose                                      | Install target       |
+| ----------------- | -------------------------------------------- | -------------------- |
+| `.venv-qiskit`    | Qiskit simulation (training + evaluation)    | `make env-qiskit`    |
+| `.venv-pennylane` | PennyLane simulation (alternative framework) | `make env-pennylane` |
+| `.venv-device`    | Real-device inference via IBM Quantum        | `make env-device`    |
 
 ### Prerequisites
 
@@ -27,7 +27,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Create environments
 
-From the repo root, use `make` to create any (or all) environments:
+From the repo root, use `make` to create any (or all) environments. Each target runs `uv sync` with the corresponding dependency group and writes into the named environment via `UV_PROJECT_ENVIRONMENT`:
 
 ```bash
 make env-qiskit      # Qiskit simulation
@@ -35,15 +35,14 @@ make env-pennylane   # PennyLane simulation
 make env-device      # Real-device inference (IBM Quantum)
 ```
 
-Each target creates a venv and installs the project in editable mode with the appropriate dependencies.
+Core + notebook + tracking dependencies are installed by default, and the framework-specific group is added per target.
 
 ### Usage
 
-Activate the environment you need, then run the notebook:
+Run commands through uv without manual activation:
 
 ```bash
-source .venv-qiskit/bin/activate
-jupyter notebook notebooks/qml_project.ipynb
+make run-notebook-qiskit
 ```
 
 The `qml_project` package is available in all three environments.
@@ -55,7 +54,7 @@ This project uses MLflow to track design-space exploration runs, enabling system
 **View tracked experiments:**
 
 ```bash
-mlflow ui
+make mlflow-ui-qiskit
 ```
 
 Open [http://localhost:5000](http://localhost:5000) to browse runs, compare configurations, and view metrics.

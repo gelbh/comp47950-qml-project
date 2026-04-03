@@ -15,12 +15,18 @@ dependencies = [
     "pandas",
     "matplotlib",
     "pylatexenc",
-    "jupyter",
-    "ipykernel",
-    "mlflow>=2.17.0,<3",
+    "nbconvert>=7.17.0",
+    "pytest>=9.0.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
+notebook = [
+    "jupyter",
+    "ipykernel",
+]
+tracking = [
+    "mlflow>=2.17.0,<3",
+]
 qiskit = [
     "qiskit>=1.3",
     "qiskit-aer",
@@ -32,6 +38,9 @@ device = [
     "qiskit>=1.3",
     "qiskit-ibm-runtime",
 ]
+
+[tool.uv]
+default-groups = ["notebook", "tracking"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
