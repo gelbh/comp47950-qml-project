@@ -1,13 +1,13 @@
 """
 Variational quantum classifier.
 
-Implements the circuit design:
-  - Basic block: RX(π/2) → RZ(·) → RX(π/2), one per qubit per layer.
+Implements:
+  - Two ansatze: ``basic_block`` and ``ry_rz``.
   - Alternating feature and parameter layers with CZ entanglement.
   - Bitstring-to-class output mapping (equal-range bins).
-  - Softmax negative-log-likelihood loss.
+  - Softmax NLL plus expectation-based losses (defined in this module).
 
-Designed for Qiskit ≥ 2.0 (QuantumCircuit, ParameterVector, StatevectorSampler).
+Designed for Qiskit >= 2.0 (QuantumCircuit, ParameterVector, V2 primitives).
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from qiskit.circuit import ParameterVector, QuantumCircuit
 # ---------------------------------------------------------------------------
 
 CZStrategy = Literal["linear", "all", "random"]
+AnsatzName = Literal["basic_block", "ry_rz"]
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +93,8 @@ class VariationalClassifier:
         CZ pairs used in each layer (for inspection / reproducibility).
     layer_types : list[str]
         ``"feature"`` or ``"param"`` for each layer.
+    ansatz : AnsatzName
+        Per-qubit block style used in each layer.
     """
 
     circuit: QuantumCircuit
@@ -103,6 +106,7 @@ class VariationalClassifier:
     class_map: dict[int, int]
     cz_pairs_per_layer: list[list[tuple[int, int]]]
     layer_types: list[str]
+    ansatz: AnsatzName
     # Private: indices into circuit.parameters for fast binding
     _feat_idx: np.ndarray = field(repr=False, default_factory=lambda: np.array([]))
     _train_idx: np.ndarray = field(repr=False, default_factory=lambda: np.array([]))
@@ -161,6 +165,7 @@ def build_circuit(
     n_layers: int | None = None,
     cz_strategy: CZStrategy = "linear",
     cz_seed: int = 42,
+    ansatz: AnsatzName = "basic_block",
 ) -> VariationalClassifier:
     """
     Construct a variational classifier circuit.
@@ -181,6 +186,10 @@ def build_circuit(
         CZ-gate pair selection strategy.
     cz_seed : int
         RNG seed for ``"random"`` CZ strategy (ignored otherwise).
+    ansatz : ``"basic_block"`` | ``"ry_rz"``
+        Choice of the per-qubit ansatz block:
+          - ``"basic_block"``: RX(pi/2) -> RZ(angle) -> RX(pi/2)
+          - ``"ry_rz"``: RY(angle) -> RZ(angle)
 
     Returns
     -------
@@ -193,6 +202,8 @@ def build_circuit(
         raise ValueError("n_features must be ≥ 1")
     if n_classes < 2:
         raise ValueError("n_classes must be ≥ 2")
+    if ansatz not in ("basic_block", "ry_rz"):
+        raise ValueError("ansatz must be 'basic_block' or 'ry_rz'")
 
     # Minimum feature layers to encode every feature at least once
     n_feat_layers_min = math.ceil(n_features / n_qubits)
@@ -233,7 +244,6 @@ def build_circuit(
     cz_pairs_per_layer: list[list[tuple[int, int]]] = []
 
     for layer_i in range(n_layers):
-        # Basic block per qubit: RX(π/2) → RZ(angle) → RX(π/2)
         for q in range(n_qubits):
             slot_type, slot_k = layer_slots[layer_i][q]
             angle = (
@@ -241,9 +251,13 @@ def build_circuit(
                 if slot_type == "feature"
                 else trainable_params[slot_k]
             )
-            qc.rx(np.pi / 2, q)
-            qc.rz(angle, q)
-            qc.rx(np.pi / 2, q)
+            if ansatz == "basic_block":
+                qc.rx(np.pi / 2, q)
+                qc.rz(angle, q)
+                qc.rx(np.pi / 2, q)
+            else:
+                qc.ry(angle, q)
+                qc.rz(angle, q)
 
         # CZ entanglement
         if n_qubits >= 2:
@@ -284,6 +298,7 @@ def build_circuit(
         class_map=class_map,
         cz_pairs_per_layer=cz_pairs_per_layer,
         layer_types=layer_types,
+        ansatz=ansatz,
         _feat_idx=feat_indices,
         _train_idx=train_indices,
     )
@@ -353,6 +368,29 @@ def counts_to_class_probs(
         return np.ones(n_classes, dtype=np.float64) / n_classes
 
     return class_counts / total_valid
+
+
+def counts_to_z_expectation(
+    counts: dict[str, int],
+    *,
+    qubit: int = 0,
+) -> float:
+    """
+    Convert shot counts to expectation value <Z_qubit>.
+
+    Qiskit count keys are big-endian strings; qubit ``0`` corresponds to the
+    right-most bit.
+    """
+    total = int(sum(counts.values()))
+    if total == 0:
+        return 0.0
+
+    z_sum = 0.0
+    for bitstring, count in counts.items():
+        bit = bitstring[-1 - qubit]
+        z_val = 1.0 if bit == "0" else -1.0
+        z_sum += z_val * count
+    return z_sum / total
 
 
 # ---------------------------------------------------------------------------
