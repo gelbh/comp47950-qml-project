@@ -17,6 +17,7 @@ dependencies = [
     "pylatexenc",
     "nbconvert>=7.17.0",
     "pytest>=9.0.2",
+    "tqdm",
 ]
 
 [dependency-groups]
