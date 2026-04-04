@@ -279,10 +279,12 @@ def build_circuit(
     param_list = list(qc.parameters)
     param_to_pos = {p: i for i, p in enumerate(param_list)}
     feat_indices = np.array(
-        [param_to_pos[feature_params[k]] for k in range(n_features)]
+        [param_to_pos[feature_params[k]] for k in range(n_features)],
+        dtype=np.intp,
     )
     train_indices = np.array(
-        [param_to_pos[trainable_params[k]] for k in range(n_trainable)]
+        [param_to_pos[trainable_params[k]] for k in range(n_trainable)],
+        dtype=np.intp,
     )
 
     # Bitstring-to-class mapping

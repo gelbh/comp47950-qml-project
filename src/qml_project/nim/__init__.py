@@ -45,6 +45,7 @@ from qml_project.nim.data import (  # noqa: F401
     training_subsets,
     ood_split,
     normalise_states,
+    angle_rad_from_heaps,
     prepare_experiment_data,
     all_heap_permutations,
     augment_s3,

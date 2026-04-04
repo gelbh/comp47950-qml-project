@@ -697,6 +697,11 @@ def normalise_states(
     return states.astype(np.float64) / M_max
 
 
+def angle_rad_from_heaps(states: np.ndarray, *, M_max: int = 7) -> np.ndarray:
+    """Angle-encode heap rows as ``(h_i / M_max) * pi`` for VQC input."""
+    return (states.astype(np.float64) / float(M_max)) * np.pi
+
+
 # ---------------------------------------------------------------------------
 # Convenience: prepare everything in one call
 # ---------------------------------------------------------------------------

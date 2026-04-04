@@ -18,7 +18,7 @@ import os
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal, Sequence
+from typing import Any, Callable, Literal, Sequence, cast
 
 import numpy as np
 import pandas as pd
@@ -38,6 +38,7 @@ from sklearn.metrics.pairwise import polynomial_kernel, rbf_kernel
 from sklearn.svm import SVC
 
 from qml_project.nim.data import augment_s3, normalise_states
+from qml_project.parallel_sweep import map_parallel_or_serial
 from qml_project.nim.game import (
     NimMove,
     NimState,
@@ -660,6 +661,86 @@ def _load_sweep_from_mlflow(
     return cache
 
 
+# ---------------------------------------------------------------------------
+# Parallel sweep workers (must be top-level for multiprocessing spawn)
+# ---------------------------------------------------------------------------
+
+_classical_pool: dict[str, Any] = {}
+
+
+@dataclass(frozen=True)
+class ClassicalSweepTask:
+    """One classical baseline run (raw train arrays + metadata)."""
+
+    X_sub_raw: np.ndarray
+    y_sub: np.ndarray
+    model_name: str
+    feature_set: str
+    symmetry: str
+    train_size: int
+    seed: int
+    compute_win_rate: bool
+    n_games_win_rate: int
+
+
+def _classical_sweep_pool_init(
+    X_test_raw: np.ndarray,
+    y_test: np.ndarray,
+    M: int,
+) -> None:
+    _classical_pool.clear()
+    _classical_pool["X_test_raw"] = X_test_raw
+    _classical_pool["y_test"] = y_test
+    _classical_pool["M"] = int(M)
+
+
+def execute_classical_sweep_task(
+    task: ClassicalSweepTask,
+    X_test_raw: np.ndarray,
+    y_test: np.ndarray,
+    M: int,
+) -> ClassicalResult:
+    """Train/evaluate one classical configuration (used serial and parallel)."""
+    fs = cast(FeatureSet, task.feature_set)
+    X_test_feat = prepare_features(X_test_raw, fs, M=M)
+    X_sub_feat = prepare_features(task.X_sub_raw, fs, M=M)
+    models = create_models(random_state=task.seed, M=M)
+    model = models[task.model_name]
+    result = evaluate_model(
+        model,
+        X_sub_feat,
+        task.y_sub,
+        X_test_feat,
+        y_test,
+        model_name=task.model_name,
+    )
+    result.seed = task.seed
+    result.train_size = task.train_size
+    result.feature_set = task.feature_set
+    result.symmetry = task.symmetry
+    result.regime = "ood"
+    if task.compute_win_rate:
+        feat_fn = _make_feature_fn(fs, M)
+        result.win_rate = evaluate_win_rate(
+            model,
+            feat_fn,
+            n_games=task.n_games_win_rate,
+            k=3,
+            M=M,
+            seed=task.seed,
+        )
+    return result
+
+
+def _classical_sweep_worker(task: ClassicalSweepTask) -> ClassicalResult:
+    return execute_classical_sweep_task(
+        task,
+        _classical_pool["X_test_raw"],
+        _classical_pool["y_test"],
+        _classical_pool["M"],
+    )
+
+
 def run_classical_sweep(
     X_train_raw: np.ndarray,
     y_train: np.ndarray,
@@ -678,6 +759,8 @@ def run_classical_sweep(
     use_cache: bool = True,
     force_rerun: bool = False,
     verbose: bool = True,
+    max_workers: int | None = None,
+    use_tqdm: bool = True,
 ) -> SweepResults:
     """Run the full classical baseline sweep over configurations.
 
@@ -719,7 +802,12 @@ def run_classical_sweep(
     force_rerun : bool
         If True, ignore cache and run all grid points. Default False.
     verbose : bool
-        Print progress.
+        Print cache / completion messages (not per-run prints).
+    max_workers : int or None
+        If > 1, run independent configurations in subprocesses. MLflow logging
+        is always done from the parent process after results return.
+    use_tqdm : bool
+        Show a tqdm progress bar over pending runs (parent process).
     """
     from qml_project.nim.data import training_subsets
 
@@ -756,23 +844,23 @@ def run_classical_sweep(
         if verbose and cache:
             print(f"  Loaded {len(cache)} runs from MLflow cache.")
 
-    sweep = SweepResults()
     total = (
         len(model_names) * len(feature_sets) * len(symmetry_variants)
         * len(train_sizes) * len(seeds)
     )
-    done = 0
+    ordered: list[ClassicalResult | None] = []
+    pending: list[tuple[int, ClassicalSweepTask]] = []
+    idx = 0
 
     for model_name in model_names:
         for fs in feature_sets:
-            X_test_feat = prepare_features(X_test_raw, fs, M=M)
-
             for sym in symmetry_variants:
                 for seed in seeds:
-                    # Per-seed subsets so variance reflects data sampling
                     int_sizes = [s for s in train_sizes if isinstance(s, int)]
                     seed_subsets = training_subsets(
-                        X_train_raw, y_train, sizes=int_sizes,
+                        X_train_raw,
+                        y_train,
+                        sizes=int_sizes,
                         random_state=seed,
                     )
 
@@ -790,13 +878,10 @@ def run_classical_sweep(
                         )
                         cache_key = (model_name, fs, sym, result_train_size, seed)
                         if cache_key in cache:
-                            sweep.results.append(cache[cache_key])
-                            done += 1
-                            if verbose and done % 20 == 0:
-                                print(f"  [{done}/{total}] runs complete")
+                            ordered.append(cache[cache_key])
+                            idx += 1
                             continue
 
-                        # Apply symmetry augmentation
                         if sym == "augmented":
                             X_sub_use, y_sub_use = augment_s3(
                                 X_sub, y_sub, deduplicate=True,
@@ -804,45 +889,67 @@ def run_classical_sweep(
                         else:
                             X_sub_use, y_sub_use = X_sub, y_sub
 
-                        X_sub_feat = prepare_features(X_sub_use, fs, M=M)
-
-                        models = create_models(random_state=seed, M=M)
-                        model = models[model_name]
-
-                        result = evaluate_model(
-                            model,
-                            X_sub_feat, y_sub_use,
-                            X_test_feat, y_test,
-                            model_name=model_name,
-                        )
-                        result.seed = seed
-                        result.train_size = (
+                        train_size_val = (
                             tsz if isinstance(tsz, int) else len(X_sub)
                         )
-                        result.feature_set = fs
-                        result.symmetry = sym
-                        result.regime = "ood"
+                        task = ClassicalSweepTask(
+                            X_sub_raw=np.asarray(X_sub_use, dtype=np.int32),
+                            y_sub=np.asarray(y_sub_use),
+                            model_name=model_name,
+                            feature_set=str(fs),
+                            symmetry=sym,
+                            train_size=int(train_size_val),
+                            seed=int(seed),
+                            compute_win_rate=compute_win_rate,
+                            n_games_win_rate=n_games_win_rate,
+                        )
+                        ordered.append(None)
+                        pending.append((idx, task))
+                        idx += 1
 
-                        # Win rate
-                        if compute_win_rate:
-                            feat_fn = _make_feature_fn(fs, M)
-                            result.win_rate = evaluate_win_rate(
-                                model, feat_fn, n_games=n_games_win_rate,
-                                k=3, M=M, seed=seed,
-                            )
+    computed: list[ClassicalResult] = []
+    if pending:
+        tasks_only = [t for _, t in pending]
+        if max_workers is None or max_workers <= 1:
+            if use_tqdm:
+                from tqdm.auto import tqdm as _tqdm
 
-                        sweep.results.append(result)
+                computed = [
+                    execute_classical_sweep_task(t, X_test_raw, y_test, M)
+                    for t in _tqdm(
+                        tasks_only,
+                        desc="classical sweep",
+                        total=len(tasks_only),
+                    )
+                ]
+            else:
+                computed = [
+                    execute_classical_sweep_task(t, X_test_raw, y_test, M)
+                    for t in tasks_only
+                ]
+        else:
+            computed = map_parallel_or_serial(
+                tasks_only,
+                _classical_sweep_worker,
+                max_workers=max_workers,
+                use_tqdm=use_tqdm,
+                tqdm_desc="classical sweep",
+                initializer=_classical_sweep_pool_init,
+                initargs=(X_test_raw, y_test, M),
+            )
 
-                        # MLflow
-                        if mlflow_mod is not None:
-                            _log_mlflow_run(result, mlflow_mod)
+        for (i, _), res in zip(pending, computed, strict=True):
+            ordered[i] = res
 
-                        done += 1
-                        if verbose and done % 20 == 0:
-                            print(f"  [{done}/{total}] runs complete")
+    sweep = SweepResults()
+    sweep.results = [r for r in ordered if r is not None]
+
+    if mlflow_mod is not None and computed:
+        for result in computed:
+            _log_mlflow_run(result, mlflow_mod)
 
     if verbose:
-        print(f"  Sweep complete: {done} runs.")
+        print(f"  Sweep complete: {len(sweep.results)}/{total} runs.")
     return sweep
 
 

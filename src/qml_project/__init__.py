@@ -28,6 +28,10 @@ from qml_project.training import (  # noqa: F401
     MultiSeedSummary,
     SimulatedVQCRunResult,
     SimulatedVQCSweepResults,
+    VqcAnsatzHypothesis,
+    VqcNoiseSweepRunResult,
+    VqcNoiseSweepResults,
+    VqcNoiseSweepTask,
     shots_for_eval,
     evaluate_circuit,
     evaluate_circuit_outputs,
@@ -44,6 +48,11 @@ from qml_project.training import (  # noqa: F401
     run_simulated_vqc_ood_sweep,
     create_depolarizing_noise_model,
     create_noisy_sampler,
+    default_vqc_ansatz_hypotheses,
+    build_assignment_matrix_from_symmetric_readout_error,
+    mitigate_readout_prob_vector,
+    zne_extrapolate_to_zero,
+    run_vqc_noise_sweep,
 )
 
 from qml_project.design_space import (  # noqa: F401
@@ -86,4 +95,18 @@ from qml_project.baselines import (  # noqa: F401
     evaluate_win_rate,
     run_classical_sweep,
     run_baseline,
+)
+
+from qml_project.qsvm import (  # noqa: F401
+    QuantumKernelResult,
+    QuantumKernelSweepResults,
+    QuantumKernelSVMModel,
+    quantum_kernel_matrix,
+    fit_quantum_kernel_svm,
+    evaluate_quantum_kernel_svm,
+    qsvm_policy,
+    evaluate_qsvm_win_rate,
+    run_quantum_kernel_sweep,
+    build_kernel_pipeline_comparison,
+    angle_features_for_vqc,
 )

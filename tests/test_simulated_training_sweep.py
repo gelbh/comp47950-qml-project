@@ -65,11 +65,11 @@ def test_run_simulated_vqc_ood_sweep_smoke() -> None:
         )
 
     sweep = run_simulated_vqc_ood_sweep(
-        vc_builder,
         x_train,
         y_train,
         x_test,
         y_test,
+        vc_builder=vc_builder,
         train_sizes=(10, "full"),
         seeds=(0,),
         max_iter=1,
@@ -80,6 +80,7 @@ def test_run_simulated_vqc_ood_sweep_smoke() -> None:
         game_k=3,
         game_M=7,
         verbose=False,
+        use_tqdm=False,
     )
     df = sweep.to_dataframe()
     assert len(df) == 2
