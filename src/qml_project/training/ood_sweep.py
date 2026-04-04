@@ -1,0 +1,438 @@
+"""Simulated VQC OOD sample-efficiency sweep (train subsets, shared test set)."""
+
+from __future__ import annotations
+
+from typing import Any, Callable, Sequence
+
+import numpy as np
+
+from qml_project.circuit import VariationalClassifier, build_circuit
+from qml_project.nim.data import training_subsets
+from qml_project.parallel_sweep import map_parallel_or_serial
+from qml_project.training.evaluation import (
+    evaluate_classifier,
+    evaluate_vqc_win_rate,
+    train_classifier,
+)
+from qml_project.training.metrics import _metrics_from_preds
+from qml_project.training.mlflow_helpers import (
+    _load_simulated_vqc_ood_from_mlflow,
+    _set_mlflow_tracking_uri,
+)
+from qml_project.training.results import SimulatedVQCSweepResults
+from qml_project.training.types import (
+    DecisionRule,
+    LossName,
+    MeasurementObservable,
+    SimulatedVQCRunResult,
+    VqcOodSweepTask,
+)
+from qml_project.training.vqc_factory import _make_vqc_factory
+
+_vqc_ood_pool: dict[str, Any] = {}
+
+
+def _vqc_ood_pool_init(cfg: dict[str, Any]) -> None:
+    """Worker initializer: one picklable dict (ProcessPoolExecutor initargs)."""
+    _vqc_ood_pool.clear()
+    _vqc_ood_pool.update(cfg)
+
+
+def simulated_vqc_ood_single_run(
+    vc: VariationalClassifier,
+    subset_X: np.ndarray,
+    subset_y: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    *,
+    train_size: int,
+    seed: int,
+    max_iter: int,
+    shot_schedule: dict[int, int] | None,
+    test_shots: int,
+    sampler: Any | None,
+    decision_rule: DecisionRule,
+    observable: MeasurementObservable,
+    loss_name: LossName,
+    expectation_qubit: int,
+    feature_fn_for_policy: Callable[[np.ndarray], np.ndarray] | None,
+    compute_win_rate: bool,
+    n_games_win_rate: int,
+    game_k: int,
+    game_M: int,
+    train_verbose: bool,
+    log_interval: int,
+) -> SimulatedVQCRunResult:
+    """Train and evaluate one VQC on a train subset (OOD protocol)."""
+    best_weights, history = train_classifier(
+        vc,
+        subset_X,
+        subset_y,
+        X_test,
+        y_test,
+        max_iter=max_iter,
+        shot_schedule=shot_schedule,
+        seed=int(seed),
+        test_shots=test_shots,
+        sampler=sampler,
+        observable=observable,
+        decision_rule=decision_rule,
+        loss_name=loss_name,
+        expectation_qubit=expectation_qubit,
+        verbose=train_verbose,
+        log_interval=log_interval,
+        mlflow_experiment=None,
+    )
+    eval_result = evaluate_classifier(
+        vc,
+        X_test,
+        y_test,
+        best_weights,
+        shots=test_shots,
+        sampler=sampler,
+        seed=int(seed),
+        decision_rule=decision_rule,
+        expectation_qubit=expectation_qubit,
+    )
+    test_acc, bal_acc, mcc_val = _metrics_from_preds(
+        y_test, eval_result["predictions"]
+    )
+    win_rate_val: float | None = None
+    if compute_win_rate and feature_fn_for_policy is not None:
+        win_rate_val = evaluate_vqc_win_rate(
+            vc,
+            best_weights,
+            feature_fn_for_policy,
+            n_games=n_games_win_rate,
+            k=game_k,
+            M=game_M,
+            seed=int(seed),
+            shots=test_shots,
+            sampler=sampler,
+            decision_rule=decision_rule,
+            expectation_qubit=expectation_qubit,
+        )
+    return SimulatedVQCRunResult(
+        train_size=int(train_size),
+        seed=int(seed),
+        test_accuracy=test_acc,
+        balanced_accuracy=bal_acc,
+        mcc=mcc_val,
+        win_rate=win_rate_val,
+        training_time=float(history.total_training_time),
+        inference_time=float(eval_result["inference_time"]),
+        final_loss=float(history.best_loss),
+        ansatz=str(vc.ansatz),
+        observable=observable,
+        decision_rule=decision_rule,
+        loss_name=loss_name,
+    )
+
+
+def _vqc_ood_worker(task: VqcOodSweepTask) -> SimulatedVQCRunResult:
+    p = _vqc_ood_pool
+    ck = p["circuit_kwargs"]
+    vc = build_circuit(**ck)
+    return simulated_vqc_ood_single_run(
+        vc,
+        task.subset_X,
+        task.subset_y,
+        p["X_test"],
+        p["y_test"],
+        train_size=task.train_size,
+        seed=task.seed,
+        max_iter=p["max_iter"],
+        shot_schedule=p["shot_schedule"],
+        test_shots=p["test_shots"],
+        sampler=None,
+        decision_rule=p["decision_rule"],
+        observable=p["observable"],
+        loss_name=p["loss_name"],
+        expectation_qubit=p["expectation_qubit"],
+        feature_fn_for_policy=p["feature_fn_for_policy"],
+        compute_win_rate=p["compute_win_rate"],
+        n_games_win_rate=p["n_games_win_rate"],
+        game_k=p["game_k"],
+        game_M=p["game_M"],
+        train_verbose=False,
+        log_interval=p["log_interval"],
+    )
+
+
+def run_simulated_vqc_ood_sweep(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    *,
+    vc_builder: Callable[[], VariationalClassifier] | None = None,
+    circuit_kwargs: dict[str, Any] | None = None,
+    train_sizes: Sequence[int | str] = (50, 100, "full"),
+    seeds: Sequence[int] = tuple(range(10)),
+    max_iter: int = 200,
+    shot_schedule: dict[int, int] | None = None,
+    test_shots: int = 300,
+    sampler_factory: Callable[[int], Any] | None = None,
+    decision_rule: DecisionRule = "argmax",
+    observable: MeasurementObservable = "bitstring_probs",
+    loss_name: LossName = "softmax_nll",
+    expectation_qubit: int = 0,
+    feature_fn_for_policy: Callable[[np.ndarray], np.ndarray] | None = None,
+    compute_win_rate: bool = True,
+    n_games_win_rate: int = 200,
+    game_k: int = 3,
+    game_M: int = 7,
+    mlflow_experiment: str | None = None,
+    mlflow_run_prefix: str = "simulated-vqc-ood",
+    use_cache: bool = True,
+    force_rerun: bool = False,
+    verbose: bool = True,
+    max_workers: int | None = None,
+    use_tqdm: bool = True,
+    log_interval: int = 20,
+) -> SimulatedVQCSweepResults:
+    """
+    Run OOD VQC training at multiple train sizes and seeds.
+
+    The caller should pass OOD arrays (train on M<=5, test on M>5) and encoded
+    features. Train-size subsets are stratified per seed.
+
+    When ``use_cache=True`` and ``mlflow_experiment`` is set, finished runs
+    matching the grid (including ``mlflow_run_prefix`` in the run name) are
+    loaded from MLflow; only missing points are trained. Use ``force_rerun=True``
+    or ``use_cache=False`` to ignore the cache.
+
+    Provide exactly one of ``vc_builder`` or ``circuit_kwargs``. For
+    ``max_workers`` > 1, use ``circuit_kwargs`` (picklable) and omit
+    ``sampler_factory``; MLflow is logged from the parent process.
+    """
+    if compute_win_rate and feature_fn_for_policy is None:
+        raise ValueError(
+            "feature_fn_for_policy is required when compute_win_rate=True."
+        )
+
+    if max_workers is not None and max_workers > 1:
+        if circuit_kwargs is None:
+            raise ValueError("circuit_kwargs is required when max_workers > 1.")
+        if sampler_factory is not None:
+            raise ValueError("sampler_factory is not supported when max_workers > 1.")
+
+    factory = _make_vqc_factory(vc_builder, circuit_kwargs)
+
+    int_sizes = [int(s) for s in train_sizes if isinstance(s, int)]
+    mlflow_available = False
+    if mlflow_experiment:
+        try:
+            import mlflow
+
+            _set_mlflow_tracking_uri()
+            mlflow.set_experiment(mlflow_experiment)
+            mlflow_available = True
+        except ImportError:
+            mlflow_available = False
+            if verbose:
+                print("Warning: MLflow not available; sweep runs will not be logged.")
+
+    full_train_size = int(len(X_train))
+    temp_vc = factory()
+    vqc_cache: dict[tuple[int, int], SimulatedVQCRunResult] = {}
+    if (
+        use_cache
+        and not force_rerun
+        and mlflow_available
+        and mlflow_experiment
+    ):
+        vqc_cache = _load_simulated_vqc_ood_from_mlflow(
+            mlflow_experiment,
+            train_sizes,
+            seeds,
+            full_train_size=full_train_size,
+            max_iter=max_iter,
+            test_shots=test_shots,
+            ansatz=str(temp_vc.ansatz),
+            n_qubits=temp_vc.n_qubits,
+            n_features=temp_vc.n_features,
+            n_trainable=temp_vc.n_trainable,
+            observable=observable,
+            decision_rule=decision_rule,
+            loss_name=loss_name,
+            expectation_qubit=expectation_qubit,
+            n_games_win_rate=n_games_win_rate,
+            compute_win_rate=compute_win_rate,
+            mlflow_run_prefix=mlflow_run_prefix,
+        )
+        if verbose and vqc_cache:
+            print(f"  Loaded {len(vqc_cache)} simulated VQC runs from MLflow cache.")
+
+    total_runs = len(seeds) * len(train_sizes)
+    ordered: list[SimulatedVQCRunResult | None] = []
+    pending: list[tuple[int, VqcOodSweepTask]] = []
+    idx = 0
+    run_idx = 0
+
+    for seed in seeds:
+        per_seed_subsets = training_subsets(
+            X_train,
+            y_train,
+            sizes=int_sizes,
+            random_state=int(seed),
+        )
+        for tsz in train_sizes:
+            if tsz == "full":
+                subset = per_seed_subsets["full"]
+            elif int(tsz) in per_seed_subsets:
+                subset = per_seed_subsets[int(tsz)]
+            else:
+                continue
+
+            run_idx += 1
+            size = int(subset.size)
+            ck = (size, int(seed))
+            if ck in vqc_cache:
+                ordered.append(vqc_cache[ck])
+                idx += 1
+                if verbose and (max_workers is None or max_workers <= 1):
+                    print(
+                        f"[sim-vqc {run_idx}/{total_runs}] seed={seed} "
+                        f"train_size={size} (cached)"
+                    )
+                continue
+
+            if verbose and (max_workers is None or max_workers <= 1):
+                print(
+                    f"[sim-vqc {run_idx}/{total_runs}] seed={seed} train_size={size}"
+                )
+
+            task = VqcOodSweepTask(
+                subset_X=np.asarray(subset.X, dtype=np.float64),
+                subset_y=np.asarray(subset.y),
+                seed=int(seed),
+                train_size=size,
+            )
+            ordered.append(None)
+            pending.append((idx, task))
+            idx += 1
+
+    computed: list[SimulatedVQCRunResult] = []
+    if pending:
+        tasks_only = [t for _, t in pending]
+        if max_workers is None or max_workers <= 1:
+            serial_results: list[SimulatedVQCRunResult] = []
+            task_iter = tasks_only
+            if use_tqdm:
+                from tqdm.auto import tqdm as _tqdm
+
+                task_iter = _tqdm(
+                    tasks_only,
+                    desc="simulated VQC OOD",
+                    total=len(tasks_only),
+                )
+            for task in task_iter:
+                vc = factory()
+                sampler = (
+                    sampler_factory(int(task.seed))
+                    if sampler_factory is not None
+                    else None
+                )
+                serial_results.append(
+                    simulated_vqc_ood_single_run(
+                        vc,
+                        task.subset_X,
+                        task.subset_y,
+                        X_test,
+                        y_test,
+                        train_size=task.train_size,
+                        seed=task.seed,
+                        max_iter=max_iter,
+                        shot_schedule=shot_schedule,
+                        test_shots=test_shots,
+                        sampler=sampler,
+                        decision_rule=decision_rule,
+                        observable=observable,
+                        loss_name=loss_name,
+                        expectation_qubit=expectation_qubit,
+                        feature_fn_for_policy=feature_fn_for_policy,
+                        compute_win_rate=compute_win_rate,
+                        n_games_win_rate=n_games_win_rate,
+                        game_k=game_k,
+                        game_M=game_M,
+                        train_verbose=verbose,
+                        log_interval=log_interval,
+                    )
+                )
+            computed = serial_results
+        else:
+            assert circuit_kwargs is not None
+            pool_cfg: dict[str, Any] = {
+                "circuit_kwargs": dict(circuit_kwargs),
+                "X_test": X_test,
+                "y_test": y_test,
+                "max_iter": max_iter,
+                "shot_schedule": shot_schedule,
+                "test_shots": test_shots,
+                "decision_rule": decision_rule,
+                "observable": observable,
+                "loss_name": loss_name,
+                "expectation_qubit": expectation_qubit,
+                "feature_fn_for_policy": feature_fn_for_policy,
+                "compute_win_rate": compute_win_rate,
+                "n_games_win_rate": n_games_win_rate,
+                "game_k": game_k,
+                "game_M": game_M,
+                "log_interval": log_interval,
+            }
+            computed = map_parallel_or_serial(
+                tasks_only,
+                _vqc_ood_worker,
+                max_workers=max_workers,
+                use_tqdm=use_tqdm,
+                tqdm_desc="simulated VQC OOD",
+                initializer=_vqc_ood_pool_init,
+                initargs=(pool_cfg,),
+            )
+
+        for (i, _), res in zip(pending, computed, strict=True):
+            ordered[i] = res
+
+    sweep = SimulatedVQCSweepResults()
+    sweep.results = [r for r in ordered if r is not None]
+
+    if mlflow_available and computed:
+        import mlflow
+
+        vc_meta = temp_vc
+        for res in computed:
+            run_name = f"{mlflow_run_prefix}|n={res.train_size}|s={res.seed}"
+            with mlflow.start_run(run_name=run_name):
+                mlflow.log_params(
+                    {
+                        "pipeline": "simulated_vqc",
+                        "regime": "ood",
+                        "train_size": res.train_size,
+                        "seed": int(res.seed),
+                        "max_iter": max_iter,
+                        "test_shots": test_shots,
+                        "ansatz": res.ansatz,
+                        "n_qubits": vc_meta.n_qubits,
+                        "n_features": vc_meta.n_features,
+                        "n_trainable": vc_meta.n_trainable,
+                        "observable": observable,
+                        "decision_rule": decision_rule,
+                        "loss_name": loss_name,
+                        "expectation_qubit": expectation_qubit,
+                        "n_games_win_rate": n_games_win_rate,
+                    }
+                )
+                metrics: dict[str, float] = {
+                    "test_accuracy": float(res.test_accuracy),
+                    "balanced_accuracy": float(res.balanced_accuracy),
+                    "mcc": float(res.mcc),
+                    "training_time": float(res.training_time),
+                    "inference_time": float(res.inference_time),
+                    "final_loss": float(res.final_loss),
+                }
+                if res.win_rate is not None:
+                    metrics["win_rate"] = float(res.win_rate)
+                mlflow.log_metrics(metrics)
+
+    return sweep
