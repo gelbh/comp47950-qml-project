@@ -2,17 +2,25 @@
 mlruns/
 mlartifacts/
 
+# Secrets
+.env
+.env.local
+.env.*.local
+
 # Virtual environments
 venv/
 .venv/
 env/
 .env/
 .venv-qiskit/
+.venv-full/
 .venv-pennylane/
 .venv-device/
 
 # Python
 __pycache__/
+.pytest_cache/
+.ruff_cache/
 *.py[cod]
 *$py.class
 *.so
@@ -36,3 +44,9 @@ eggs/
 
 # Presentation
 presentation/
+
+# Notebook device cache (pickles from §8/§10)
+notebooks/.workflow_cache/
+
+# Local-only scripts (none tracked)
+scripts/

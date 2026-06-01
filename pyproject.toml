@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "qml-project"
 version = "0.1.0"
-description = "COMP47950 Quantum Machine Learning: classical, simulated QML, and real-device pipelines."
+description = "COMP47950 QML coursework: classical baselines, Qiskit sims, optional IBM Runtime."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -16,8 +16,13 @@ dependencies = [
     "matplotlib",
     "pylatexenc",
     "nbconvert>=7.17.0",
-    "pytest>=9.0.2",
     "tqdm",
+    "jupytext>=1.19.1",
+    "streamlit>=1.56.0",
+    "plotly>=6.7.0",
+    "joblib",
+    "pydantic>=2",
+    "tenacity>=8",
 ]
 
 [dependency-groups]
@@ -32,12 +37,21 @@ qiskit = [
     "qiskit>=1.3",
     "qiskit-aer",
 ]
-pennylane = [
-    "pennylane",
-]
 device = [
     "qiskit>=1.3",
     "qiskit-ibm-runtime",
+]
+# notebooks/qml_project.ipynb with notebook + tracking + qiskit + device. Not in
+# default-groups so a bare uv sync stays smaller; use --group full-notebook when needed.
+full-notebook = [
+    { include-group = "notebook" },
+    { include-group = "tracking" },
+    { include-group = "qiskit" },
+    { include-group = "device" },
+]
+# Ruff; install with uv sync --group dev.
+dev = [
+    "ruff>=0.9.0",
 ]
 
 [tool.uv]
@@ -45,3 +59,17 @@ default-groups = ["notebook", "tracking"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src"]
+exclude = [".git", ".venv", ".venv-*", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+# Pyflakes rules only (F401, F811, F821, F822).
+select = ["F401", "F811", "F821", "F822"]
+
+[tool.ruff.lint.per-file-ignores]
+# Percent notebook: names leak across cells via IPython; F821/F822 are noise here.
+"notebooks/qml_project.py" = ["F821", "F822"]
