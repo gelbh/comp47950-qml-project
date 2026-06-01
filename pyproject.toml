@@ -17,7 +17,6 @@ dependencies = [
     "pylatexenc",
     "nbconvert>=7.17.0",
     "tqdm",
-    "jupytext>=1.19.1",
     "streamlit>=1.56.0",
     "plotly>=6.7.0",
     "joblib",
@@ -72,7 +71,3 @@ exclude = [".git", ".venv", ".venv-*", "dist", "__pycache__"]
 [tool.ruff.lint]
 # Pyflakes rules only (F401, F811, F821, F822).
 select = ["F401", "F811", "F821", "F822"]
-
-[tool.ruff.lint.per-file-ignores]
-# Percent notebook: names leak across cells via IPython; F821/F822 are noise here.
-"notebooks/qml_project.py" = ["F821", "F822"]
