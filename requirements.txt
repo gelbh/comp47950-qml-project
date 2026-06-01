@@ -1163,7 +1163,9 @@ pyarrow==19.0.1 \
     --hash=sha256:f3ad4c0eb4e2a9aeb990af6c09e6fa0b195c8c0e7b272ecc8d4d2b6574809d34 \
     --hash=sha256:fc28912a2dc924dddc2087679cc8b7263accc71b9ff025a1362b004711661a69 \
     --hash=sha256:fca15aabbe9b8355800d923cc2e82c8ef514af321e18b437c3d782aa884eaeec
-    # via streamlit
+    # via
+    #   qml-project
+    #   streamlit
 pycparser==3.0 ; implementation_name == 'pypy' \
     --hash=sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29 \
     --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
@@ -1442,7 +1444,9 @@ qiskit==2.3.1 \
     --hash=sha256:a1a030b4a0cd75f3299c9866a3e9489a02078efc343abd42eec74ad2a5f2fa80 \
     --hash=sha256:b1404b72987d0c7db32203a87565775115f6a77b2a3539d40eb1e354df6d08bb \
     --hash=sha256:f884abd92c0173e246705f89f8b4808badaa0e1b167ed3277a3cb83c2564b4b8
-    # via qiskit-aer
+    # via
+    #   qiskit-aer
+    #   qml-project
 qiskit-aer==0.17.2 \
     --hash=sha256:0bd91f682dc62c0e62c30651daf45aebd462bdbc2b1a2d028be3cc85b4b09eed \
     --hash=sha256:134eef8e509311955a15be543d2ba368f988f3583a2bc1f548af3196da820eb4 \
@@ -1480,6 +1484,7 @@ qiskit-aer==0.17.2 \
     --hash=sha256:c3ffd40a64bfcf8a6d10cbfdca8734d49ec57502fd70dc63aae9ed3819249dd6 \
     --hash=sha256:d1274f5609269fc9762835d978d9e8110ca84af2d0d1dc9b08552a34a6068520 \
     --hash=sha256:ddc7360317d652ed7fbc12a83f3b3adf28258433b55f2c6022c1448473fdb407
+    # via qml-project
 referencing==0.37.0 \
     --hash=sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231 \
     --hash=sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8

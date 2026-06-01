@@ -1,0 +1,5 @@
+# Streamlit Cloud reads this file first (same directory as app.py).
+# Editable install must include Qiskit (see pyproject.toml [project].dependencies).
+-e ../..
+qiskit>=1.3
+qiskit-aer>=0.17
