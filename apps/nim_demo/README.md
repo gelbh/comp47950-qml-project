@@ -82,13 +82,15 @@ The demo is deployed from this repo on [Streamlit Community Cloud](https://share
 
 **Live app:** [https://nim-quantum-ml.streamlit.app/](https://nim-quantum-ml.streamlit.app/)
 
+Cloud dependencies are **`apps/nim_demo/environment.yml`** (conda, **Python 3.10**) — not the hashed root `requirements.txt`. The app adds `src/` to `sys.path` so `qml_project` imports without `pip install -e .`.
+
 ### One-time deploy (maintainer)
 
-1. Push the repo to **public GitHub** (includes `requirements.txt`, `.streamlit/config.toml`, and `notebooks/.workflow_cache/`).
+1. Push the repo to **public GitHub** (includes `apps/nim_demo/environment.yml`, `.streamlit/config.toml`, and `notebooks/.workflow_cache/`).
 2. At [share.streamlit.io](https://share.streamlit.io/) → **New app** → select the repo.
 3. **Main file path:** `apps/nim_demo/app.py`
-4. **Python version:** **3.10** (Advanced settings at deploy time — do not leave the default 3.14; Qiskit and this project target 3.10).
-5. Deploy (installs **`apps/nim_demo/requirements.txt`**, which includes root `requirements.txt` with `-e .`). Qiskit is in `pyproject.toml` `[project].dependencies`. No secrets required.
+4. **Python version:** **3.10** in Advanced settings if offered (conda env already pins 3.10; avoid 3.14 or pyarrow builds from source).
+5. Deploy. No secrets required. If a previous deploy used 3.14 or root `requirements.txt`, **delete the app and redeploy** so Cloud picks up `environment.yml`.
 
 ### Refresh `requirements.txt` after dependency changes
 

@@ -1,0 +1,24 @@
+# Streamlit Cloud: conda env in the entrypoint directory (beats requirements.txt here).
+# Pins Python 3.10 so pyarrow/qiskit use wheels (3.14 forces source builds and fails).
+name: nim-qml-demo
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - qiskit>=1.3,<3
+      - qiskit-aer>=0.17.0
+      - pyarrow>=19.0.0
+      - numpy>=1.26,<2.3
+      - pandas>=2.0
+      - scipy>=1.11
+      - scikit-learn>=1.3
+      - matplotlib>=3.8
+      - plotly>=6.0
+      - streamlit>=1.56
+      - pydantic>=2
+      - tenacity>=8
+      - joblib>=1.3
+      - pylatexenc>=2
+      - tqdm>=4

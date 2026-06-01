@@ -59,7 +59,7 @@ Alternatively, run `make env-qiskit` and then `make run-demo`.
 
 ### Published demo (Streamlit Community Cloud)
 
-**[https://nim-quantum-ml.streamlit.app/](https://nim-quantum-ml.streamlit.app/)** — play Nim against VQC, QSVM, or classical models; **Learn** pages mirror the report narrative. Maintainer notes: [`apps/nim_demo/README.md`](apps/nim_demo/README.md#publishing-streamlit-community-cloud). If deploy fails on dependencies, set **Python 3.10** in Advanced settings (not 3.14) and reboot after pushing fixes.
+**[https://nim-quantum-ml.streamlit.app/](https://nim-quantum-ml.streamlit.app/)** — play Nim against VQC, QSVM, or classical models; **Learn** pages mirror the report narrative. Maintainer notes: [`apps/nim_demo/README.md`](apps/nim_demo/README.md#publishing-streamlit-community-cloud). Cloud uses `apps/nim_demo/environment.yml` (Python 3.10); if the build log shows **3.14** or **pyarrow** compile errors, delete the app and redeploy after pulling the latest main.
 
 ## MLflow UI (optional)
 
