@@ -41,13 +41,45 @@ from qml_project.training.types import (
 from qml_project.training.stats import (
     bootstrap_mean_ci,
     fit_power_law_learning_curve,
+    learning_curve_xy_for_power_law,
+    paired_cross_pipeline_stat_tests,
     paired_cohens_d,
+    power_law_fit_from_learning_curve_dataframe,
     rank_biserial_from_deltas,
     sample_efficiency_stat_tests,
+)
+from qml_project.training.adversarial import (
+    add_pairwise_disagreement_column,
+    build_adversarial_analysis_dataframe,
+    build_adversarial_section_precondition_df,
+    min_distance_to_training_states,
+    pairwise_disagreement_labels,
+    plot_disagreement_geography_h3_slices,
+    plot_disagreement_rate_clustering_bars,
+    summarise_disagreement_by_distance_quantile,
+    summarise_disagreement_by_nim_sum_band,
+)
+from qml_project.training.interpretability import (
+    classical_feature_names,
+    classical_permutation_importance,
+    classical_posthoc_coefficients_or_importances,
+    hypothesis_verdict_balanced_accuracy_tables,
+    interpretability_precondition_dataframe,
+    quantum_winners_test_predictions_interpretability,
+    raw_vs_parity_importance_summary,
+    refit_classical_raw_best_predict_test,
+    select_interpretability_case_studies,
+    summarize_interpretability_disagreements,
+    vqc_parameter_sensitivity,
 )
 from qml_project.training.results import (
     SimulatedVQCSweepResults,
     VqcNoiseSweepResults,
+)
+from qml_project.training.cost_metrics import (
+    add_cost_metric_contract_columns,
+    shots_to_target_balanced_accuracy,
+    summarize_cost_performance,
 )
 from qml_project.training.noise_aer import (
     build_assignment_matrix_from_symmetric_readout_error,
@@ -66,9 +98,45 @@ from qml_project.training.evaluation import (
     train_classifier,
     vqc_policy,
 )
+from qml_project.training.mlflow_helpers import (
+    end_all_active_mlflow_runs,
+    end_mlflow_run_if_active_id,
+    end_mlflow_run_if_nested_under,
+    log_quantum_selection_winners_to_mlflow,
+    parse_mlflow_bool,
+    set_mlflow_tracking_uri,
+)
+from qml_project.training.mlflow_run_index import (
+    RunRow,
+    iter_finished_run_rows,
+    run_row_from_mlflow,
+)
+from qml_project.training.mlflow_schema import (
+    FILTER_FINISHED_QSVM,
+    MetricKey,
+    ParamKey,
+    PipelineValue,
+    RegimeValue,
+    filter_finished_pipeline_equals,
+)
 from qml_project.training.multi_seed import run_multi_seed_experiment
 from qml_project.training.ood_sweep import run_simulated_vqc_ood_sweep
 from qml_project.training.noise_sweep import run_vqc_noise_sweep
+from qml_project.training.final_three_way_comparison import (
+    FinalThreeWayComparisonBundle,
+    build_final_three_way_comparison,
+    build_paired_heap_only_quantum_workflow_rows,
+    cmp_coerce_to_long,
+    select_classical_winner_rows,
+    vqc_heap_only_config_id,
+)
+from qml_project.training.selection import Winner
+from qml_project.training.experiment_namespace import (
+    CANONICAL_EXPERIMENTS,
+    resolve_experiment,
+    run_name,
+    standard_tags,
+)
 
 __all__ = [
     "MeasurementObservable",
@@ -94,9 +162,41 @@ __all__ = [
     "run_multi_seed_experiment",
     "bootstrap_mean_ci",
     "paired_cohens_d",
+    "FinalThreeWayComparisonBundle",
+    "build_final_three_way_comparison",
+    "build_paired_heap_only_quantum_workflow_rows",
+    "cmp_coerce_to_long",
+    "select_classical_winner_rows",
+    "vqc_heap_only_config_id",
+    "paired_cross_pipeline_stat_tests",
     "rank_biserial_from_deltas",
     "sample_efficiency_stat_tests",
     "fit_power_law_learning_curve",
+    "learning_curve_xy_for_power_law",
+    "power_law_fit_from_learning_curve_dataframe",
+    "min_distance_to_training_states",
+    "pairwise_disagreement_labels",
+    "build_adversarial_analysis_dataframe",
+    "add_pairwise_disagreement_column",
+    "build_adversarial_section_precondition_df",
+    "plot_disagreement_geography_h3_slices",
+    "plot_disagreement_rate_clustering_bars",
+    "summarise_disagreement_by_nim_sum_band",
+    "summarise_disagreement_by_distance_quantile",
+    "classical_feature_names",
+    "classical_permutation_importance",
+    "classical_posthoc_coefficients_or_importances",
+    "hypothesis_verdict_balanced_accuracy_tables",
+    "quantum_winners_test_predictions_interpretability",
+    "raw_vs_parity_importance_summary",
+    "refit_classical_raw_best_predict_test",
+    "summarize_interpretability_disagreements",
+    "interpretability_precondition_dataframe",
+    "select_interpretability_case_studies",
+    "vqc_parameter_sensitivity",
+    "add_cost_metric_contract_columns",
+    "shots_to_target_balanced_accuracy",
+    "summarize_cost_performance",
     "run_simulated_vqc_ood_sweep",
     "create_depolarizing_noise_model",
     "create_noisy_sampler",
@@ -105,4 +205,24 @@ __all__ = [
     "mitigate_readout_prob_vector",
     "zne_extrapolate_to_zero",
     "run_vqc_noise_sweep",
+    "Winner",
+    "CANONICAL_EXPERIMENTS",
+    "resolve_experiment",
+    "run_name",
+    "standard_tags",
+    "end_mlflow_run_if_nested_under",
+    "end_mlflow_run_if_active_id",
+    "end_all_active_mlflow_runs",
+    "set_mlflow_tracking_uri",
+    "parse_mlflow_bool",
+    "log_quantum_selection_winners_to_mlflow",
+    "FILTER_FINISHED_QSVM",
+    "MetricKey",
+    "ParamKey",
+    "PipelineValue",
+    "RegimeValue",
+    "filter_finished_pipeline_equals",
+    "RunRow",
+    "iter_finished_run_rows",
+    "run_row_from_mlflow",
 ]

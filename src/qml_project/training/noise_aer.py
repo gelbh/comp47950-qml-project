@@ -108,7 +108,7 @@ def default_vqc_ansatz_hypotheses() -> dict[str, VqcAnsatzHypothesis]:
                 "more stable, even if clean-sim expressivity is slightly lower."
             ),
             expected_strength=(
-                "Better robustness under depolarising/readout noise at fixed shots."
+                "Holds up better under depolarising/readout noise at fixed shots."
             ),
             primary_risk=(
                 "Potential underfitting if shallow depth cannot represent full Nim-sum geometry."

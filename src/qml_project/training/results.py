@@ -21,6 +21,7 @@ class SimulatedVQCSweepResults:
     """Collection of simulated VQC runs across train sizes and seeds."""
 
     results: list[SimulatedVQCRunResult] = field(default_factory=list)
+    sweep_metadata: dict[str, float | int | None] = field(default_factory=dict)
 
     def to_dataframe(self) -> pd.DataFrame:
         rows: list[dict[str, float | int | str | None]] = []
@@ -130,6 +131,7 @@ class VqcNoiseSweepResults:
     """Collection of VQC noise-sweep runs."""
 
     results: list[VqcNoiseSweepRunResult] = field(default_factory=list)
+    sweep_metadata: dict[str, float | int | None] = field(default_factory=dict)
 
     def to_dataframe(self) -> pd.DataFrame:
         rows: list[dict[str, float | int | str | None]] = []
