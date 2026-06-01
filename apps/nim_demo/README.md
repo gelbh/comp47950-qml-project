@@ -87,8 +87,8 @@ The demo is deployed from this repo on [Streamlit Community Cloud](https://share
 1. Push the repo to **public GitHub** (includes `requirements.txt`, `.streamlit/config.toml`, and `notebooks/.workflow_cache/`).
 2. At [share.streamlit.io](https://share.streamlit.io/) → **New app** → select the repo.
 3. **Main file path:** `apps/nim_demo/app.py`
-4. **Python version:** 3.10
-5. Deploy (installs from **`apps/nim_demo/requirements.txt`** first, then editable `qml_project` at repo root). Qiskit is listed in `pyproject.toml` `[project].dependencies` so `-e ../..` always pulls it in. No secrets required.
+4. **Python version:** **3.10** (Advanced settings at deploy time — do not leave the default 3.14; Qiskit and this project target 3.10).
+5. Deploy (installs **`apps/nim_demo/requirements.txt`**, which includes root `requirements.txt` with `-e .`). Qiskit is in `pyproject.toml` `[project].dependencies`. No secrets required.
 
 ### Refresh `requirements.txt` after dependency changes
 
