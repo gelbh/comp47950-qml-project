@@ -75,3 +75,37 @@ startup on heaps ≤ 5.
 Inference is local statevector simulation (no live hardware; device bars
 use cached pickles). Auto-play uses `time.sleep` so the page pauses
 briefly on purpose between moves.
+
+## Publishing (Streamlit Community Cloud)
+
+The demo is deployed from this repo on [Streamlit Community Cloud](https://share.streamlit.io/). Demo data lives in **`notebooks/.workflow_cache/`** (tracked in git; parquets, VQC/QSVM payloads, and optional §10 device result pickles).
+
+**Live app:** *(add your URL after deploy, e.g. `https://your-app.streamlit.app`)*
+
+### One-time deploy (maintainer)
+
+1. Push the repo to **public GitHub** (includes `requirements.txt`, `.streamlit/config.toml`, and `notebooks/.workflow_cache/`).
+2. At [share.streamlit.io](https://share.streamlit.io/) → **New app** → select the repo.
+3. **Main file path:** `apps/nim_demo/app.py`
+4. **Python version:** 3.10
+5. Deploy (first build installs Qiskit from `requirements.txt` and editable `qml_project` via `-e .`). No secrets required.
+
+### Refresh `requirements.txt` after dependency changes
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-qiskit uv export --group qiskit --no-default-groups --no-dev -o requirements.txt
+```
+
+The export includes project dependencies plus Qiskit (not the notebook/MLflow groups). It should start with `-e .` (editable install of this package). Reboot the Cloud app after pushing.
+
+### Refresh demo data after re-running the notebook
+
+Re-run cells that print `nim_demo: wrote ...`, plus §8.5 (payload pickles) and §10 (device results) as needed. Commit updated files under `notebooks/.workflow_cache/`, push, then **Reboot app** on Streamlit Cloud.
+
+### Post-deploy smoke test
+
+| Area | Check |
+|------|--------|
+| Play → VQC / QSVM | Train-size dropdown populated; a move runs |
+| Learn → Classical, VQC, QSVM, Training | Plots/tables from parquets |
+| Learn → Noise/Device, Results | Device traces from `*_device_result_*.pkl` |

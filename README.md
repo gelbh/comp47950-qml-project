@@ -12,7 +12,7 @@ This submission compares **classical**, **simulated QML** (VQC and QSVM), and **
 
 - **`src/qml_project/`** — importable package (circuits, training, baselines, device helpers, Nim utilities).
 - **`notebooks/`** — primary submission: [`notebooks/qml_project.ipynb`](notebooks/qml_project.ipynb) (implementation and report).
-- **`apps/nim_demo/`** — Streamlit demonstration (see [`apps/nim_demo/README.md`](apps/nim_demo/README.md) for layout and behaviour).
+- **`apps/nim_demo/`** — Streamlit demonstration (see [`apps/nim_demo/README.md`](apps/nim_demo/README.md) for layout, behaviour, and **Streamlit Cloud** deploy steps).
 
 Also included: **`Makefile`**, **`pyproject.toml`**, **`uv.lock`**.
 
@@ -56,6 +56,10 @@ UV_PROJECT_ENVIRONMENT=.venv-full uv run streamlit run apps/nim_demo/app.py
 ```
 
 Alternatively, run `make env-qiskit` and then `make run-demo`.
+
+### Published demo (Streamlit Community Cloud)
+
+After deploy, the public interactive demo URL is listed in [`apps/nim_demo/README.md`](apps/nim_demo/README.md#publishing-streamlit-community-cloud). Deploy from GitHub with main file `apps/nim_demo/app.py`, Python 3.10, and root [`requirements.txt`](requirements.txt).
 
 ## MLflow UI (optional)
 

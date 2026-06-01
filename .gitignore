@@ -45,8 +45,5 @@ eggs/
 # Presentation
 presentation/
 
-# Notebook device cache (pickles from §8/§10)
-notebooks/.workflow_cache/
-
 # Local-only scripts (none tracked)
 scripts/
