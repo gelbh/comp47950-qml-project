@@ -3,7 +3,7 @@
 Generates the complete dataset for the Nim QML project:
 
 * **State enumeration** — all non-terminal states for arbitrary *k* and *M*.
-* **Labelling** — win/loss (primary) and optimal-move index (secondary).
+* **Labelling** — win/loss from the Nim-sum (winning iff Nim-sum $\neq 0$).
 * **OOD split:** Train on states with all heaps ≤ *M_train* (215 for M_train=5),
   test on states with at least one heap > *M_train* (296). Training-size
   subsets: **50, 100, full (215)**.
@@ -16,42 +16,18 @@ All splits are stratified by the binary win/loss label and use explicit
 from __future__ import annotations
 
 import itertools
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from numpy.random import Generator
 from sklearn.model_selection import train_test_split
 
 from qml_project.nim.game import (
-    NimMove,
     NimState,
     is_winning,
-    legal_moves,
     nim_sum,
-    optimal_move,
 )
-
-# ---------------------------------------------------------------------------
-# Move-index encoding
-# ---------------------------------------------------------------------------
-
-
-def move_to_index(move: NimMove, *, M: int) -> int:
-    """Encode ``(heap, amount)`` as a flat class index.
-
-    Mapping: ``heap * M + (amount - 1)``, giving indices in ``[0, k*M)``.
-    """
-    heap, amount = move
-    return heap * M + (amount - 1)
-
-
-def index_to_move(idx: int, *, M: int) -> NimMove:
-    """Decode a flat class index back to ``(heap, amount)``."""
-    heap, rem = divmod(idx, M)
-    return (heap, rem + 1)
-
 
 # ---------------------------------------------------------------------------
 # State enumeration
@@ -86,26 +62,17 @@ class NimDataset:
         Shape ``(n,)`` — 1 for winning positions, 0 for losing.
     nim_sums : np.ndarray
         Shape ``(n,)`` — Nim-sum of each state.
-    optimal_move_idx : np.ndarray
-        Shape ``(n,)`` — flat move index for move-prediction labelling.
     k : int
         Number of heaps.
     M : int
         Maximum heap size.
-    n_classes_move : int
-        Total number of move templates (``k * M``).
     """
 
     states: np.ndarray
     is_winning: np.ndarray
     nim_sums: np.ndarray
-    optimal_move_idx: np.ndarray
     k: int
     M: int
-    n_classes_move: int = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.n_classes_move = self.k * self.M
 
     def __len__(self) -> int:
         return len(self.states)
@@ -115,15 +82,12 @@ class NimDataset:
         cols = {f"h{i}": self.states[:, i] for i in range(self.k)}
         cols["nim_sum"] = self.nim_sums
         cols["is_winning"] = self.is_winning
-        cols["optimal_move_idx"] = self.optimal_move_idx
         return pd.DataFrame(cols)
 
 
 def generate_dataset(
     k: int = 3,
     M: int = 7,
-    *,
-    random_state: int = 42,
 ) -> NimDataset:
     """Enumerate all non-terminal states and label them.
 
@@ -131,9 +95,6 @@ def generate_dataset(
     ----------
     k, M : int
         Number of heaps and maximum heap size.
-    random_state : int
-        Seed for the RNG used to select moves for losing positions
-        (move-index labelling — any legal move is acceptable).
 
     Returns
     -------
@@ -141,25 +102,20 @@ def generate_dataset(
         Fully labelled dataset ready for splitting.
     """
     raw_states = enumerate_states(k, M)
-    rng = np.random.default_rng(random_state)
 
     states = np.array(raw_states, dtype=np.int32)
     n = len(raw_states)
     win = np.empty(n, dtype=np.int32)
     ns = np.empty(n, dtype=np.int32)
-    move_idx = np.empty(n, dtype=np.int32)
 
     for i, s in enumerate(raw_states):
         ns[i] = nim_sum(s)
         win[i] = int(ns[i] != 0)
-        mv = optimal_move(s, rng)
-        move_idx[i] = move_to_index(mv, M=M)
 
     return NimDataset(
         states=states,
         is_winning=win,
         nim_sums=ns,
-        optimal_move_idx=move_idx,
         k=k,
         M=M,
     )
@@ -371,8 +327,6 @@ def ood_split(
     k: int = 3,
     M_train: int = 5,
     M_test: int = 7,
-    *,
-    random_state: int = 42,
 ) -> OODSplit:
     """Generate the OOD regime: train on small boards, test on larger unseen ones.
 
@@ -386,37 +340,30 @@ def ood_split(
     M_test : int
         Maximum heap size for the full state space.  States with at least one
         heap > *M_train* (and all heaps ≤ *M_test*) form the test set.
-    random_state : int
-        Seed for labelling RNG (move labels for losing positions).
 
     Returns
     -------
     OODSplit
         Contains fully labelled train and test :class:`NimDataset` objects.
     """
-    train_ds = generate_dataset(k, M_train, random_state=random_state)
+    train_ds = generate_dataset(k, M_train)
 
     all_states = enumerate_states(k, M_test)
     ood_states = [s for s in all_states if max(s) > M_train]
 
-    rng = np.random.default_rng(random_state)
     states_arr = np.array(ood_states, dtype=np.int32)
     n = len(ood_states)
     win = np.empty(n, dtype=np.int32)
     ns_arr = np.empty(n, dtype=np.int32)
-    move_idx = np.empty(n, dtype=np.int32)
 
     for i, s in enumerate(ood_states):
         ns_arr[i] = nim_sum(s)
         win[i] = int(ns_arr[i] != 0)
-        mv = optimal_move(s, rng)
-        move_idx[i] = move_to_index(mv, M=M_test)
 
     test_ds = NimDataset(
         states=states_arr,
         is_winning=win,
         nim_sums=ns_arr,
-        optimal_move_idx=move_idx,
         k=k,
         M=M_test,
     )
@@ -466,7 +413,7 @@ def augment_s3(
 
     For each row in *X*, generates all permutations of the heap vector.
     Labels in *y* must be permutation-invariant (e.g. win/loss based on
-    Nim-sum).  For move-index labels, use :func:`augment_s3_moves`.
+    Nim-sum).
 
     Parameters
     ----------
@@ -507,68 +454,6 @@ def augment_s3(
     return X_flat, y_flat
 
 
-def augment_s3_moves(
-    X: np.ndarray,
-    y_move: np.ndarray,
-    *,
-    M: int,
-    deduplicate: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Augment a dataset with S_3 permutations, remapping move indices.
-
-    Unlike :func:`augment_s3`, this correctly permutes move-index labels:
-    if the original move is from heap *i*, the permuted move is from the
-    heap that position *i* was mapped to.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape ``(n, 3)``
-    y_move : np.ndarray, shape ``(n,)``
-        Flat move indices (``heap * M + (amount - 1)``).
-    M : int
-        Maximum heap size (for move encoding).
-    deduplicate : bool
-        If *True*, keeps only the first occurrence of each unique state
-        (and its corresponding permuted move label).
-
-    Returns
-    -------
-    X_aug, y_move_aug : np.ndarray
-    """
-    k = X.shape[1]
-    if k != 3:
-        raise ValueError(f"augment_s3_moves currently supports k=3, got k={k}")
-
-    perms = np.array(_S3_PERMS, dtype=np.intp)  # (6, 3)
-    inv_perms = np.empty_like(perms)
-    for i, p in enumerate(perms):
-        for j, v in enumerate(p):
-            inv_perms[i, v] = j
-
-    n = X.shape[0]
-    X_expanded = X[:, perms]  # (n, 6, 3)
-    X_flat = X_expanded.reshape(-1, k)
-
-    # Remap move labels: original (heap, amount) → (inv_perm[heap], amount)
-    heaps_orig = y_move // M        # (n,)
-    amounts_m1 = y_move % M         # amount - 1
-
-    # For each of the 6 perms, compute the new heap index
-    # inv_perms[:, heap_orig] gives the new heap index for each perm
-    new_heaps = inv_perms[:, heaps_orig]  # (6, n)
-    new_heaps = new_heaps.T.ravel()       # (n*6,)
-    amounts_flat = np.tile(amounts_m1, len(perms))
-    y_flat = new_heaps * M + amounts_flat
-
-    if deduplicate:
-        _, unique_idx = np.unique(X_flat, axis=0, return_index=True)
-        unique_idx.sort()
-        X_flat = X_flat[unique_idx]
-        y_flat = y_flat[unique_idx]
-
-    return X_flat, y_flat
-
-
 def canonical_order(
     X: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -588,52 +473,12 @@ def canonical_order(
         Heap sizes sorted ascending within each row
         (``h_1 \\leq h_2 \\leq h_3``).
     sort_perms : np.ndarray, shape ``(n, k)``
-        The ``argsort`` permutation applied to each row.  Useful for
-        mapping a predicted move index back to the original heap ordering.
+        The ``argsort`` permutation applied to each row (row *i* of
+        ``sort_perms`` is the index order that sorts ``X[i]``).
     """
     sort_perms = np.argsort(X, axis=1).astype(np.intp)
     X_sorted = np.take_along_axis(X, sort_perms, axis=1)
     return X_sorted, sort_perms
-
-
-def remap_move_to_original(
-    move_idx: int | np.ndarray,
-    sort_perm: np.ndarray,
-    *,
-    M: int,
-) -> int | np.ndarray:
-    """Map a predicted move index from canonical heap order back to original.
-
-    After canonical ordering, heap indices refer to sorted positions.  This
-    function translates the predicted heap index back to the original
-    (unsorted) heap index using the stored ``argsort`` permutation.
-
-    Parameters
-    ----------
-    move_idx : int or np.ndarray
-        Flat move index in the canonical (sorted) frame.
-    sort_perm : np.ndarray, shape ``(k,)`` or ``(n, k)``
-        The ``argsort`` permutation from :func:`canonical_order`.
-    M : int
-        Maximum heap size.
-    """
-    scalar = np.isscalar(move_idx)
-    move_idx = np.atleast_1d(np.asarray(move_idx))
-    sort_perm = np.atleast_2d(sort_perm)
-
-    sorted_heap = move_idx // M
-    amount_m1 = move_idx % M
-
-    # sort_perm[i] maps original positions → sorted positions;
-    # sort_perm[i, j] = original position that ended up in sorted position j.
-    # So original_heap = sort_perm[i, sorted_heap[i]].
-    if sort_perm.shape[0] == 1:
-        original_heap = sort_perm[0, sorted_heap]
-    else:
-        original_heap = sort_perm[np.arange(len(move_idx)), sorted_heap]
-
-    result = original_heap * M + amount_m1
-    return int(result[0]) if scalar else result
 
 
 def count_canonical_states(k: int = 3, M: int = 7) -> int:
@@ -746,10 +591,10 @@ def prepare_experiment_data(
     subset_sizes : sequence of int
         Subset sizes for training-size sweep.
     random_state : int
-        Master seed for all splitting and labelling.
+        Seed for stratified training-size subsets (:func:`training_subsets`).
     """
-    dataset = generate_dataset(k, M, random_state=random_state)
-    split = ood_split(k, M_train=M_train, M_test=M, random_state=random_state)
+    dataset = generate_dataset(k, M)
+    split = ood_split(k, M_train=M_train, M_test=M)
     subsets = training_subsets(
         split.X_train, split.y_train, sizes=subset_sizes, random_state=random_state
     )
