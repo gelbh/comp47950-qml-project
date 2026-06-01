@@ -4,9 +4,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-F37626?logo=jupyter&logoColor=white)](https://jupyter.org/)
 [![MLflow](https://img.shields.io/badge/MLflow-tracking-0194E2?logo=mlflow&logoColor=white)](https://mlflow.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-demo-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Streamlit demo](https://img.shields.io/badge/Nim_QML-live_demo-FF4B4B?logo=streamlit&logoColor=white)](https://nim-quantum-ml.streamlit.app/)
 
-This submission compares **classical**, **simulated QML** (VQC and QSVM), and **inference-only IBM Quantum** evaluation on a Nim classification task. The main deliverable is the implementation notebook and report; optional extras include a Streamlit demo.
+This submission compares **classical**, **simulated QML** (VQC and QSVM), and **inference-only IBM Quantum** evaluation on a Nim classification task. The main deliverable is the implementation notebook and report; the interactive [**Nim QML demo**](https://nim-quantum-ml.streamlit.app/) is published on Streamlit Community Cloud.
 
 ## What is in this bundle
 
@@ -59,7 +59,7 @@ Alternatively, run `make env-qiskit` and then `make run-demo`.
 
 ### Published demo (Streamlit Community Cloud)
 
-After deploy, the public interactive demo URL is listed in [`apps/nim_demo/README.md`](apps/nim_demo/README.md#publishing-streamlit-community-cloud). Deploy from GitHub with main file `apps/nim_demo/app.py`, Python 3.10, and root [`requirements.txt`](requirements.txt).
+**[https://nim-quantum-ml.streamlit.app/](https://nim-quantum-ml.streamlit.app/)** — play Nim against VQC, QSVM, or classical models; **Learn** pages mirror the report narrative. Maintainer notes: [`apps/nim_demo/README.md`](apps/nim_demo/README.md#publishing-streamlit-community-cloud).
 
 ## MLflow UI (optional)
 

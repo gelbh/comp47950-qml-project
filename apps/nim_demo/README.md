@@ -80,7 +80,7 @@ briefly on purpose between moves.
 
 The demo is deployed from this repo on [Streamlit Community Cloud](https://share.streamlit.io/). Demo data lives in **`notebooks/.workflow_cache/`** (tracked in git; parquets, VQC/QSVM payloads, and optional §10 device result pickles).
 
-**Live app:** *(add your URL after deploy, e.g. `https://your-app.streamlit.app`)*
+**Live app:** [https://nim-quantum-ml.streamlit.app/](https://nim-quantum-ml.streamlit.app/)
 
 ### One-time deploy (maintainer)
 
@@ -88,7 +88,7 @@ The demo is deployed from this repo on [Streamlit Community Cloud](https://share
 2. At [share.streamlit.io](https://share.streamlit.io/) → **New app** → select the repo.
 3. **Main file path:** `apps/nim_demo/app.py`
 4. **Python version:** 3.10
-5. Deploy (first build installs Qiskit from `requirements.txt` and editable `qml_project` via `-e .`). No secrets required.
+5. Deploy (installs from **`apps/nim_demo/requirements.txt`** first, then editable `qml_project` at repo root). Qiskit is listed in `pyproject.toml` `[project].dependencies` so `-e ../..` always pulls it in. No secrets required.
 
 ### Refresh `requirements.txt` after dependency changes
 
@@ -104,8 +104,8 @@ Re-run cells that print `nim_demo: wrote ...`, plus §8.5 (payload pickles) and 
 
 ### Post-deploy smoke test
 
-| Area | Check |
-|------|--------|
-| Play → VQC / QSVM | Train-size dropdown populated; a move runs |
-| Learn → Classical, VQC, QSVM, Training | Plots/tables from parquets |
-| Learn → Noise/Device, Results | Device traces from `*_device_result_*.pkl` |
+| Area                                   | Check                                      |
+| -------------------------------------- | ------------------------------------------ |
+| Play → VQC / QSVM                      | Train-size dropdown populated; a move runs |
+| Learn → Classical, VQC, QSVM, Training | Plots/tables from parquets                 |
+| Learn → Noise/Device, Results          | Device traces from `*_device_result_*.pkl` |
