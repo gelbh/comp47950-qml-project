@@ -1,68 +1,68 @@
 # Quantum Machine Learning (COMP47950)
 
-![COMP47950](https://img.shields.io/badge/Course-COMP47950-blue)
-[![Python](https://img.shields.io/badge/Python-3.x-informational)](https://python.org)
-[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange)](https://jupyter.org)
-[![MLflow](https://img.shields.io/badge/MLflow-Tracking-purple)](https://mlflow.org)
+![Course](https://img.shields.io/badge/Course-COMP47950-blue)
+[![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-F37626?logo=jupyter&logoColor=white)](https://jupyter.org/)
+[![MLflow](https://img.shields.io/badge/MLflow-tracking-0194E2?logo=mlflow&logoColor=white)](https://mlflow.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-demo-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 
-Compare **classical**, **simulated QML**, and **quantum-device (inference-only)** pipelines on a simple ML task. Deliverables: midterm presentation, implementation notebook & report, demonstration.
+This submission compares **classical**, **simulated QML** (VQC and QSVM), and **inference-only IBM Quantum** evaluation on a Nim classification task. The main deliverable is the implementation notebook and report; optional extras include a Streamlit demo.
 
-## Development setup
+## What is in this bundle
 
-The project uses **three separate uv-managed environments** to avoid dependency conflicts between quantum frameworks:
+- **`src/qml_project/`** — importable package (circuits, training, baselines, device helpers, Nim utilities).
+- **`notebooks/`** — primary submission: [`notebooks/qml_project.ipynb`](notebooks/qml_project.ipynb) (implementation and report).
+- **`apps/nim_demo/`** — Streamlit demonstration (see [`apps/nim_demo/README.md`](apps/nim_demo/README.md) for layout and behaviour).
 
-| Environment       | Purpose                                      | Install target       |
-| ----------------- | -------------------------------------------- | -------------------- |
-| `.venv-qiskit`    | Qiskit simulation (training + evaluation)    | `make env-qiskit`    |
-| `.venv-pennylane` | PennyLane simulation (alternative framework) | `make env-pennylane` |
-| `.venv-device`    | Real-device inference via IBM Quantum        | `make env-device`    |
+Also included: **`Makefile`**, **`pyproject.toml`**, **`uv.lock`**.
 
-### Prerequisites
+## Prerequisites
 
-Install [uv](https://docs.astral.sh/uv/) (fast Python package manager):
+- **Python 3.10** (matches the default in the `Makefile`).
+- **[uv](https://docs.astral.sh/uv/)** — install from the vendor instructions, for example:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Create environments
+## Recommended setup (full notebook)
 
-From the repo root, use `make` to create any (or all) environments. Each target runs `uv sync` with the corresponding dependency group and writes into the named environment via `UV_PROJECT_ENVIRONMENT`:
-
-```bash
-make env-qiskit      # Qiskit simulation
-make env-pennylane   # PennyLane simulation
-make env-device      # Real-device inference (IBM Quantum)
-```
-
-Core + notebook + tracking dependencies are installed by default, and the framework-specific group is added per target.
-
-### Usage
-
-Run commands through uv without manual activation:
+From the repository root, create the environment that includes Jupyter, MLflow, Qiskit, Aer, and IBM Runtime, then start the notebook:
 
 ```bash
-make run-notebook-qiskit
+make env-full
+make run-notebook-full
 ```
 
-The `qml_project` package is available in all three environments.
+The `qml_project` package is installed from `src/` into that environment.
 
-### Experiment tracking with MLflow
+Lighter dependency sets (Qiskit-only, device-only) exist as other `make env-*` targets in the `Makefile` if you need them.
 
-This project uses MLflow to track design-space exploration runs, enabling systematic comparison of circuit configurations.
+### Optional: Jupyter kernel for `.venv-full`
 
-**View tracked experiments:**
+If you use Jupyter outside the `make run-notebook-full` flow, register a kernel (then pick **Python (qml-full)** in the kernel menu):
 
 ```bash
-make mlflow-ui-qiskit
+UV_PROJECT_ENVIRONMENT=.venv-full uv run python -m ipykernel install --user \
+  --name=qml-full --display-name="Python (qml-full)"
 ```
 
-Open [http://localhost:5000](http://localhost:5000) to browse runs, compare configurations, and view metrics.
+## Streamlit demo (same venv as the full notebook)
 
-**Note:** MLflow is used during exploration but not required to view the final deliverable. To fully reproduce, include the `mlruns/` directory when archiving the project.
-
-### Cleanup
+`make run-demo` in the `Makefile` uses a different virtualenv (`.venv-qiskit`). If you only created **`.venv-full`**, run the demo with:
 
 ```bash
-make clean-envs      # Remove all three venvs
+UV_PROJECT_ENVIRONMENT=.venv-full uv run streamlit run apps/nim_demo/app.py
 ```
+
+Alternatively, run `make env-qiskit` and then `make run-demo`.
+
+## MLflow UI (optional)
+
+After `make env-full`, you can browse local experiment data (if present) with:
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-full uv run mlflow ui
+```
+
+then open [http://localhost:5000](http://localhost:5000). The graded narrative lives in the notebook outputs; MLflow is not required to read the report.
